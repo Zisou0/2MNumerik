@@ -1,0 +1,41 @@
+
+services:
+  backend:
+    build: ./server
+    container_name: my-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server:/app
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: D8tlzMr@7vGqLp2
+      DB_NAME: 2MNumerik
+
+  frontend:
+    build: ./client
+    container_name: my-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules # Prevent overwriting node_modules in container
+    depends_on:
+      - backend
+
+  db:
+    image: mysql:8
+    container_name: my-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: D8tlzMr@7vGqLp2
+      MYSQL_DATABASE: 2MNumerik
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysqldata:/var/lib/mysql
+
+volumes:
+  mysqldata:

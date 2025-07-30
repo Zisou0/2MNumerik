@@ -1,0 +1,21 @@
+{
+  "name": "mnumerik",
+  "version": "1.0.0",
+  "description": "Full-stack application with React frontend and Node.js backend",
+  "scripts": {
+    "dev": "concurrently --prefix-colors \"bgBlue.bold,bgMagenta.bold\" --names \"SERVER,CLIENT\" \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "install:all": "npm install && npm run install:client && npm run install:server",
+    "install:client": "cd client && npm install",
+    "install:server": "cd server && npm install",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["react", "node", "express", "mysql"],
+  "author": "",
+  "license": "ISC"
+}
