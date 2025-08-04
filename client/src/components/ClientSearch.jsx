@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { clientAPI } from '../utils/api';
 
 const ClientSearch = ({ onClientSelect, selectedClient, className = '' }) => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedClientData, setSelectedClientData] = useState(null);
-  const [showManualInput, setShowManualInput] = useState(false);
   const searchRef = useRef(null);
   const dropdownRef = useRef(null);
 
@@ -64,7 +65,6 @@ const ClientSearch = ({ onClientSelect, selectedClient, className = '' }) => {
     // If the user clears the input, reset the selected client
     if (value === '') {
       setSelectedClientData(null);
-      setShowManualInput(false);
       onClientSelect(null);
     }
   };
@@ -75,16 +75,9 @@ const ClientSearch = ({ onClientSelect, selectedClient, className = '' }) => {
     }
   };
 
-  const handleUseManualInput = () => {
-    setShowManualInput(true);
-    setIsDropdownOpen(false);
-    setSelectedClientData(null);
-    // Create a mock client object with just the name
-    const manualClient = {
-      nom: searchTerm,
-      isManual: true
-    };
-    onClientSelect(manualClient);
+  const handleCreateNewClient = () => {
+    // Navigate to clients page to create a new client
+    navigate('/clients');
   };
 
   return (
@@ -148,15 +141,15 @@ const ClientSearch = ({ onClientSelect, selectedClient, className = '' }) => {
               ))}
               {searchTerm.length >= 2 && (
                 <div 
-                  className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-t border-gray-200 bg-gray-50"
-                  onClick={handleUseManualInput}
+                  className="px-4 py-3 hover:bg-green-50 cursor-pointer border-t border-gray-200 bg-gray-50"
+                  onClick={handleCreateNewClient}
                 >
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <span className="text-blue-600 font-medium">
-                      Utiliser "{searchTerm}" comme nouveau client
+                    <span className="text-green-600 font-medium">
+                      Créer un nouveau client
                     </span>
                   </div>
                 </div>
@@ -169,15 +162,15 @@ const ClientSearch = ({ onClientSelect, selectedClient, className = '' }) => {
               </div>
               {searchTerm.length >= 2 && (
                 <div 
-                  className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-t border-gray-200 bg-gray-50"
-                  onClick={handleUseManualInput}
+                  className="px-4 py-3 hover:bg-green-50 cursor-pointer border-t border-gray-200 bg-gray-50"
+                  onClick={handleCreateNewClient}
                 >
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <span className="text-blue-600 font-medium">
-                      Utiliser "{searchTerm}" comme nouveau client
+                    <span className="text-green-600 font-medium">
+                      Créer un nouveau client
                     </span>
                   </div>
                 </div>
@@ -224,20 +217,6 @@ const ClientSearch = ({ onClientSelect, selectedClient, className = '' }) => {
                 {selectedClientData.type_client}
               </span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Input Notice */}
-      {showManualInput && (
-        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            <span className="text-amber-700 text-sm">
-              Vous utilisez un nom de client qui n'existe pas dans la base de données. Il sera sauvegardé comme texte libre.
-            </span>
           </div>
         </div>
       )}
