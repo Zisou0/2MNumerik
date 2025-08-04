@@ -81,7 +81,7 @@ function HomePage() {
 
   const getStatusColor = (status) => {
     const colors = {
-      'en_attente': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'problem_technique': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'en_cours': 'bg-blue-100 text-blue-800 border-blue-200',
       'termine': 'bg-green-100 text-green-800 border-green-200',
       'livre': 'bg-purple-100 text-purple-800 border-purple-200',
@@ -92,7 +92,7 @@ function HomePage() {
 
   const formatStatus = (status) => {
     const statusMap = {
-      'en_attente': 'En attente',
+      'problem_technique': 'Problème technique',
       'en_cours': 'En cours',
       'termine': 'Terminé',
       'livre': 'Livré',
@@ -176,8 +176,8 @@ function HomePage() {
               </div>
             </div>
             <div>
-              <p className="text-3xl font-bold text-gray-900 mb-2">{data.stats.en_attente || 0}</p>
-              <p className="text-red-600 text-sm font-semibold uppercase tracking-wide">En Attente</p>
+              <p className="text-3xl font-bold text-gray-900 mb-2">{data.stats.problem_technique || 0}</p>
+              <p className="text-red-600 text-sm font-semibold uppercase tracking-wide">Problème Technique</p>
             </div>
           </div>
 

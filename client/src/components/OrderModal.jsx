@@ -17,7 +17,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     client_id: null,
     commercial_en_charge: '',
     date_limite_livraison_attendue: '',
-    statut: 'en_attente'
+    statut: 'en_cours'
   })
   
   // Product selection and product-specific data
@@ -153,7 +153,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         commercial_en_charge: order.commercial_en_charge || '',
         date_limite_livraison_attendue: order.date_limite_livraison_attendue ? 
           new Date(order.date_limite_livraison_attendue).toISOString().slice(0, 16) : '',
-        statut: order.statut || 'en_attente'
+        statut: order.statut || 'en_cours'
       })
       
       // Set selected client from order data

@@ -67,7 +67,7 @@ const DashboardPageClean = () => {
   
   // Options arrays
   const statusOptions = [
-    { value: 'en_attente', label: 'En attente' },
+    { value: 'problem_technique', label: 'Problème technique' },
     { value: 'en_cours', label: 'En cours' },
     { value: 'termine', label: 'Terminé' },
     { value: 'livre', label: 'Livré' },
@@ -391,7 +391,7 @@ const DashboardPageClean = () => {
   // Status badge component
   const getStatusBadge = (status) => {
     const statusConfig = {
-      'en_attente': { label: 'En attente', color: 'bg-yellow-100 text-yellow-800' },
+      'problem_technique': { label: 'Problème technique', color: 'bg-yellow-100 text-yellow-800' },
       'en_cours': { label: 'En cours', color: 'bg-blue-100 text-blue-800' },
       'termine': { label: 'Terminé', color: 'bg-purple-100 text-purple-800' },
       'livre': { label: 'Livré', color: 'bg-green-100 text-green-800' },
@@ -978,8 +978,8 @@ const DashboardPageClean = () => {
             <div className="text-sm text-gray-600">Total actives</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
-            <div className="text-2xl font-bold text-yellow-600">{stats.en_attente || 0}</div>
-            <div className="text-sm text-gray-600">En attente</div>
+            <div className="text-2xl font-bold text-yellow-600">{stats.problem_technique || 0}</div>
+            <div className="text-sm text-gray-600">Problème technique</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
             <div className="text-2xl font-bold text-green-600">{stats.en_cours || 0}</div>

@@ -61,9 +61,9 @@ module.exports = (sequelize) => {
       comment: 'Étape actuelle pour ce produit (conception, pré-presse, impression, finition, découpe)'
     },
     statut: {
-      type: DataTypes.ENUM('en_attente', 'en_cours', 'termine', 'livre', 'annule'),
+      type: DataTypes.ENUM('problem_technique', 'en_cours', 'termine', 'livre', 'annule'),
       allowNull: false,
-      defaultValue: 'en_attente',
+      defaultValue: 'en_cours',
       comment: 'Statut spécifique à ce produit'
     },
     estimated_work_time_minutes: {

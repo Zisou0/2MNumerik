@@ -90,7 +90,7 @@ function StatisticsPage() {
       'soustraitance': '#8B5CF6'
     },
     status: {
-      'en_attente': '#F59E0B',
+      'problem_technique': '#F59E0B',
       'en_cours': '#3B82F6',
       'termine': '#10B981',
       'livre': '#8B5CF6',
@@ -679,7 +679,7 @@ function StatisticsPage() {
               <BarChart
                 data={Object.entries(statistics.orders.byStatus).map(([status, count]) => {
                   const statusLabels = {
-                    'en_attente': 'En attente',
+                    'problem_technique': 'Problème technique',
                     'en_cours': 'En cours', 
                     'termine': 'Terminé',
                     'livre': 'Livré',

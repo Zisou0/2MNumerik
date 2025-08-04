@@ -175,7 +175,7 @@ export const usePriorityNotifications = (orders) => {
         // Notify on status changes to urgent priorities
         if (currentPriority === 'overdue' || currentPriority === 'urgent' || currentPriority === 'high') {
           const statusMessages = {
-            'en_attente': 'En attente',
+            'problem_technique': 'Problème technique',
             'en_cours': 'En cours',
             'termine': 'Terminé',
             'livre': 'Livré',

@@ -44,9 +44,9 @@ module.exports = (sequelize) => {
       comment: 'Date et heure de livraison attendue par le client pour toute la commande'
     },
     statut: {
-      type: DataTypes.ENUM('en_attente', 'en_cours', 'termine', 'livre', 'annule'),
+      type: DataTypes.ENUM('problem_technique', 'en_cours', 'termine', 'livre', 'annule'),
       allowNull: false,
-      defaultValue: 'en_attente',
+      defaultValue: 'en_cours',
       comment: 'État actuel de la commande (calculé automatiquement à partir des produits)'
     },
     commentaires: {
@@ -64,11 +64,11 @@ module.exports = (sequelize) => {
   // Static method to calculate order status from product statuses
   Order.calculateOverallStatus = function(productStatuses) {
     if (!productStatuses || productStatuses.length === 0) {
-      return 'en_attente';
+      return 'en_cours';
     }
 
     const statusCounts = {
-      'en_attente': 0,
+      'problem_technique': 0,
       'en_cours': 0,
       'termine': 0,
       'livre': 0,
@@ -99,13 +99,18 @@ module.exports = (sequelize) => {
       return 'termine';
     }
     
+    // If any product has technical problems, order has technical problems
+    if (statusCounts.problem_technique > 0) {
+      return 'problem_technique';
+    }
+    
     // If any product is in progress, order is in progress
     if (statusCounts.en_cours > 0) {
       return 'en_cours';
     }
     
-    // Otherwise, order is waiting
-    return 'en_attente';
+    // Otherwise, order is in progress (default)
+    return 'en_cours';
   };
 
   // Instance method to update status based on products

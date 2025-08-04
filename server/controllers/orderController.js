@@ -389,7 +389,7 @@ class OrderController {
         client_id, // Add client_id support
         products, // Array of {productId, quantity, unitPrice?, numero_pms, infograph_en_charge, etc.}
         date_limite_livraison_attendue,
-        statut = 'en_attente'
+        statut = 'en_cours'
       } = req.body;
 
       // Validate required fields - updated for new structure
@@ -473,7 +473,7 @@ class OrderController {
         infograph_en_charge: product.infograph_en_charge || null,
         agent_impression: product.agent_impression || null,
         etape: product.etape || null,
-        statut: product.statut || 'en_attente',
+        statut: product.statut || 'en_cours',
         estimated_work_time_minutes: product.estimated_work_time_minutes || null,
         date_limite_livraison_estimee: product.date_limite_livraison_estimee ? new Date(product.date_limite_livraison_estimee) : null,
         atelier_concerne: product.atelier_concerne || null,
@@ -733,7 +733,7 @@ class OrderController {
           infograph_en_charge: product.infograph_en_charge || null,
           agent_impression: product.agent_impression || null,
           etape: product.etape || null,
-          statut: product.statut || 'en_attente',
+          statut: product.statut || 'en_cours',
           estimated_work_time_minutes: product.estimated_work_time_minutes || null,
           date_limite_livraison_estimee: product.date_limite_livraison_estimee ? new Date(product.date_limite_livraison_estimee) : null,
           atelier_concerne: product.atelier_concerne || null,
@@ -956,7 +956,7 @@ class OrderController {
 
       // Format the stats
       const formattedStats = {
-        en_attente: 0,
+        problem_technique: 0,
         en_cours: 0,
         termine: 0,
         livre: 0,
