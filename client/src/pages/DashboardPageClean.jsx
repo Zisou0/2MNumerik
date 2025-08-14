@@ -110,7 +110,6 @@ const DashboardPageClean = () => {
         })
       }
     })
-    
     return Array.from(orderMap.values())
   }
 
@@ -1297,87 +1296,87 @@ const DashboardPageClean = () => {
                       onClick={(e) => handleRowClick(row, e)}
                     >
                       {visibleColumns.numero_affaire && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
                         </td>
                       )}
                       {visibleColumns.numero_dm && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_dm', row.numero_dm)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {row.client_info}
                         </td>
                       )}
                       {visibleColumns.product_name && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {row.product_name}
                         </td>
                       )}
                       {visibleColumns.quantity && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'quantity', row.quantity)}
                         </td>
                       )}
                       {visibleColumns.numero_pms && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_pms', row.numero_pms)}
                         </td>
                       )}
                       {visibleColumns.commercial_en_charge && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {row.commercial_en_charge}
                         </td>
                       )}
                       {visibleColumns.statut && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineStatus(row)}
                         </td>
                       )}
                       {visibleColumns.etape && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'etape', etapeOptions)}
                         </td>
                       )}
                       {visibleColumns.atelier_concerne && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
                         </td>
                       )}
                       {visibleColumns.infograph_en_charge && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'infograph_en_charge', row.infograph_en_charge)}
                         </td>
                       )}
                       {visibleColumns.agent_impression && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'agent_impression', row.agent_impression)}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_estimee && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
                         </td>
                       )}
                       {visibleColumns.estimated_work_time_minutes && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
                         </td>
                       )}
                       {visibleColumns.bat && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'bat', batOptions)}
                         </td>
                       )}
                       {visibleColumns.express && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {canDeleteOrders() && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center gap-2 action-button">
                             <button
                               onClick={(e) => {
@@ -1419,87 +1418,87 @@ const DashboardPageClean = () => {
                       onClick={(e) => handleRowClick(row, e)}
                     >
                       {visibleColumns.numero_affaire && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
                         </td>
                       )}
                       {visibleColumns.numero_dm && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_dm', row.numero_dm)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {row.client_info}
                         </td>
                       )}
                       {visibleColumns.product_name && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {row.product_name}
                         </td>
                       )}
                       {visibleColumns.quantity && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'quantity', row.quantity)}
                         </td>
                       )}
                       {visibleColumns.numero_pms && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_pms', row.numero_pms)}
                         </td>
                       )}
                       {visibleColumns.commercial_en_charge && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {row.commercial_en_charge}
                         </td>
                       )}
                       {visibleColumns.statut && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineStatus(row)}
                         </td>
                       )}
                       {visibleColumns.etape && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'etape', etapeOptions)}
                         </td>
                       )}
                       {visibleColumns.atelier_concerne && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
                         </td>
                       )}
                       {visibleColumns.infograph_en_charge && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'infograph_en_charge', row.infograph_en_charge)}
                         </td>
                       )}
                       {visibleColumns.agent_impression && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'agent_impression', row.agent_impression)}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_estimee && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
                         </td>
                       )}
                       {visibleColumns.estimated_work_time_minutes && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
                         </td>
                       )}
                       {visibleColumns.bat && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'bat', batOptions)}
                         </td>
                       )}
                       {visibleColumns.express && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {canDeleteOrders() && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center gap-2 action-button">
                             <button
                               onClick={(e) => {

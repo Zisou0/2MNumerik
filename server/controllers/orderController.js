@@ -1022,14 +1022,7 @@ class OrderController {
 
       // Check permissions
       const userRole = req.user.role;
-      if (userRole === 'infograph') {
-        // Infograph can only update products assigned to them or unassigned
-        if (orderProduct.infograph_en_charge && 
-            orderProduct.infograph_en_charge !== req.user.username) {
-          await transaction.rollback();
-          return res.status(403).json({ message: 'Accès refusé: ce produit est assigné à un autre infographe' });
-        }
-      }
+      // Removed infograph assignment restrictions - any infograph can edit any product
 
       // Update the order product
       await orderProduct.update({
