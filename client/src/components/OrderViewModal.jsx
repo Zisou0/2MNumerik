@@ -131,11 +131,14 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
 
   const visibleViewFields = getVisibleViewFields()
 
-  // Define the steps for the progress stepper based on etapeOptions
-  const steps = etapeOptions.map(etape => ({
-    key: etape,
-    label: etape === 'pré-presse' ? 'Pré-presse' : etape.charAt(0).toUpperCase() + etape.slice(1)
-  }));
+  // Define the steps for the progress stepper based on etapeOptions (excluding conception and travail graphique)
+  const steps = etapeOptions
+    .filter(etape => etape !== 'conception' && etape !== 'travail graphique')
+    .map(etape => ({
+      key: etape,
+      label: etape === 'pré-presse' ? 'Pré-presse' : 
+             etape.charAt(0).toUpperCase() + etape.slice(1)
+    }));
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in">

@@ -54,7 +54,7 @@ module.exports = {
       etape: {
         type: Sequelize.STRING,
         allowNull: true,
-        comment: 'Stade du projet (pré-presse, impression, etc.)'
+        comment: 'Stade du projet (conception, pré-presse, travail graphique, impression, finition)'
       },
       option_finition: {
         type: Sequelize.TEXT,

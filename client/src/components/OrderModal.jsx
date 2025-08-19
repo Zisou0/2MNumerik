@@ -253,7 +253,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       infograph_en_charge: '',
       agent_impression: '',
       date_limite_livraison_estimee: '',
-      etape: '',
+      etape: 'pré-presse',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
       bat: '',
@@ -821,7 +821,6 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                         onChange={(e) => updateProduct(index, 'etape', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                       >
-                                        <option value="">Sélectionner une étape</option>
                                         {etapeOptions.map(etape => (
                                           <option key={etape} value={etape}>
                                             {etape}

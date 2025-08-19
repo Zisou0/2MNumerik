@@ -58,7 +58,7 @@ module.exports = (sequelize) => {
     etape: {
       type: DataTypes.STRING,
       allowNull: true,
-      comment: 'Étape actuelle pour ce produit (conception, pré-presse, impression, finition, découpe)'
+      comment: 'Étape actuelle pour ce produit (conception, pré-presse, travail graphique, impression, finition)'
     },
     statut: {
       type: DataTypes.ENUM('problem_technique', 'en_cours', 'termine', 'livre', 'annule'),

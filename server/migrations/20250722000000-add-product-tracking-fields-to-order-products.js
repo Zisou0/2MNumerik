@@ -18,7 +18,7 @@ module.exports = {
     await queryInterface.addColumn('order_products', 'etape', {
       type: Sequelize.STRING,
       allowNull: true,
-      comment: 'Étape actuelle pour ce produit (conception, pré-presse, impression, finition, découpe)'
+      comment: 'Étape actuelle pour ce produit (conception, pré-presse, travail graphique, impression, finition)'
     });
 
     await queryInterface.addColumn('order_products', 'statut', {

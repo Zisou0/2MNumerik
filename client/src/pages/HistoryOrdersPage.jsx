@@ -38,7 +38,7 @@ const HistoryOrdersPage = () => {
   ]
 
   const atelierOptions = ['petit format', 'grand format', 'sous-traitance']
-  const etapeOptions = ['conception', 'pré-presse', 'impression', 'finition', 'découpe']
+  const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition']
 
   // Helper function to check if user can delete orders
   const canDeleteOrders = () => {

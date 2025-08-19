@@ -75,7 +75,10 @@ const DashboardPageClean = () => {
   ]
   
   const atelierOptions = ['petit format', 'grand format', 'sous-traitance']
-  const etapeOptions = ['conception', 'pré-presse', 'impression', 'finition', 'découpe']
+  
+  // All users can now filter by any etape
+  const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition']
+  
   const batOptions = [
     { value: 'avec', label: 'Avec' },
     { value: 'sans', label: 'Sans' }
@@ -148,7 +151,8 @@ const DashboardPageClean = () => {
         express: false,
         commentaires: true
       }
-    } else if (user?.role === 'infograph') {
+    } else if (user?.role === 'infograph' || user?.role === 'atelier') {
+      // For infograph and atelier users: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais
       return {
         numero_affaire: false,
         numero_dm: false,
@@ -164,10 +168,10 @@ const DashboardPageClean = () => {
         infograph_en_charge: true,
         agent_impression: true,
         date_limite_livraison_estimee: true,
-        estimated_work_time_minutes: true,
+        estimated_work_time_minutes: false,
         bat: true,
         express: true,
-        commentaires: true
+        commentaires: false
       }
     } else {
       // Admin and other roles see everything
@@ -428,7 +432,7 @@ const DashboardPageClean = () => {
         'infograph_en_charge', 'date_limite_livraison_estimee', 
         'estimated_work_time_minutes', 'bat', 'express', 'commentaires', 'finitions'
       ], // Infograph can edit product-level fields
-      atelier: ['statut', 'etape', 'atelier_concerne', 'commentaires'] // Atelier can edit limited fields
+      atelier: ['statut', 'etape', 'atelier_concerne', 'agent_impression', 'commentaires'] // Atelier can edit limited fields
     }
     
     const userRole = user?.role || 'guest'
@@ -726,6 +730,80 @@ const DashboardPageClean = () => {
           <span>{orderProductRow[field] || '-'}</span>
           {fieldEditable && (
             <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInlineBat = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-bat`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'bat', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'bat', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'bat')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'bat')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          >
+            <option value="">-</option>
+            {batOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('bat')
+    const batValue = orderProductRow.bat
+
+    // Get background color based on BAT value
+    const getBatBackgroundClass = (value) => {
+      if (value === 'avec') {
+        return 'bg-green-100 text-green-800 border border-green-200'
+      } else if (value === 'sans') {
+        return 'bg-red-100 text-red-800 border border-red-200'
+      } else {
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
+      }
+    }
+
+    const getBatLabel = (value) => {
+      const option = batOptions.find(opt => opt.value === value)
+      return option ? option.label : (value || '-')
+    }
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:opacity-80 px-2 py-1 rounded transition-all duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'bat', orderProductRow.bat)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getBatBackgroundClass(batValue)}`}>
+            {getBatLabel(batValue)}
+          </span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           )}
@@ -1187,14 +1265,10 @@ const DashboardPageClean = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {visibleColumns.numero_affaire && (
+                {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
+                {visibleColumns.atelier_concerne && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    N° Affaire
-                  </th>
-                )}
-                {visibleColumns.numero_dm && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    N° DM
+                    Atelier
                   </th>
                 )}
                 {visibleColumns.client_info && (
@@ -1212,51 +1286,6 @@ const DashboardPageClean = () => {
                     Quantité
                   </th>
                 )}
-                {visibleColumns.numero_pms && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    N° PMS
-                  </th>
-                )}
-                {visibleColumns.commercial_en_charge && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Commercial
-                  </th>
-                )}
-                {visibleColumns.statut && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                )}
-                {visibleColumns.etape && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Étape
-                  </th>
-                )}
-                {visibleColumns.atelier_concerne && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Atelier
-                  </th>
-                )}
-                {visibleColumns.infograph_en_charge && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Infographe
-                  </th>
-                )}
-                {visibleColumns.agent_impression && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Agent impression
-                  </th>
-                )}
-                {visibleColumns.date_limite_livraison_estimee && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Deadline
-                  </th>
-                )}
-                {visibleColumns.estimated_work_time_minutes && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Temps (min)
-                  </th>
-                )}
                 {visibleColumns.bat && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     BAT
@@ -1265,6 +1294,57 @@ const DashboardPageClean = () => {
                 {visibleColumns.express && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Express
+                  </th>
+                )}
+                {visibleColumns.infograph_en_charge && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Graphiste
+                  </th>
+                )}
+                {visibleColumns.numero_pms && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    N° PMS
+                  </th>
+                )}
+                {visibleColumns.etape && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Étape
+                  </th>
+                )}
+                {visibleColumns.agent_impression && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Agent impression
+                  </th>
+                )}
+                {visibleColumns.statut && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Statut
+                  </th>
+                )}
+                {visibleColumns.date_limite_livraison_estimee && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Délais
+                  </th>
+                )}
+                {/* Other columns for non-infograph/atelier roles */}
+                {visibleColumns.numero_affaire && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    N° Affaire
+                  </th>
+                )}
+                {visibleColumns.numero_dm && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    N° DM
+                  </th>
+                )}
+                {visibleColumns.commercial_en_charge && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Commercial
+                  </th>
+                )}
+                {visibleColumns.estimated_work_time_minutes && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Temps (min)
                   </th>
                 )}
                 {canDeleteOrders() && (
@@ -1295,14 +1375,10 @@ const DashboardPageClean = () => {
                       className={`transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(row)}`}
                       onClick={(e) => handleRowClick(row, e)}
                     >
-                      {visibleColumns.numero_affaire && (
+                      {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
+                      {visibleColumns.atelier_concerne && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
-                        </td>
-                      )}
-                      {visibleColumns.numero_dm && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'numero_dm', row.numero_dm)}
+                          {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
@@ -1320,29 +1396,14 @@ const DashboardPageClean = () => {
                           {renderInlineNumber(row, 'quantity', row.quantity)}
                         </td>
                       )}
-                      {visibleColumns.numero_pms && (
+                      {visibleColumns.bat && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'numero_pms', row.numero_pms)}
+                          {renderInlineBat(row)}
                         </td>
                       )}
-                      {visibleColumns.commercial_en_charge && (
+                      {visibleColumns.express && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {row.commercial_en_charge}
-                        </td>
-                      )}
-                      {visibleColumns.statut && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineStatus(row)}
-                        </td>
-                      )}
-                      {visibleColumns.etape && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'etape', etapeOptions)}
-                        </td>
-                      )}
-                      {visibleColumns.atelier_concerne && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
+                          {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {visibleColumns.infograph_en_charge && (
@@ -1350,9 +1411,24 @@ const DashboardPageClean = () => {
                           {renderInlineText(row, 'infograph_en_charge', row.infograph_en_charge)}
                         </td>
                       )}
+                      {visibleColumns.numero_pms && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'numero_pms', row.numero_pms)}
+                        </td>
+                      )}
+                      {visibleColumns.etape && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineSelect(row, 'etape', etapeOptions)}
+                        </td>
+                      )}
                       {visibleColumns.agent_impression && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'agent_impression', row.agent_impression)}
+                        </td>
+                      )}
+                      {visibleColumns.statut && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineStatus(row)}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_estimee && (
@@ -1360,19 +1436,25 @@ const DashboardPageClean = () => {
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
                         </td>
                       )}
+                      {/* Other columns for non-infograph/atelier roles */}
+                      {visibleColumns.numero_affaire && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
+                        </td>
+                      )}
+                      {visibleColumns.numero_dm && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'numero_dm', row.numero_dm)}
+                        </td>
+                      )}
+                      {visibleColumns.commercial_en_charge && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {row.commercial_en_charge}
+                        </td>
+                      )}
                       {visibleColumns.estimated_work_time_minutes && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
-                        </td>
-                      )}
-                      {visibleColumns.bat && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'bat', batOptions)}
-                        </td>
-                      )}
-                      {visibleColumns.express && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {canDeleteOrders() && (
@@ -1417,14 +1499,10 @@ const DashboardPageClean = () => {
                       className={`transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(row)}`}
                       onClick={(e) => handleRowClick(row, e)}
                     >
-                      {visibleColumns.numero_affaire && (
+                      {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
+                      {visibleColumns.atelier_concerne && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
-                        </td>
-                      )}
-                      {visibleColumns.numero_dm && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'numero_dm', row.numero_dm)}
+                          {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
@@ -1442,29 +1520,14 @@ const DashboardPageClean = () => {
                           {renderInlineNumber(row, 'quantity', row.quantity)}
                         </td>
                       )}
-                      {visibleColumns.numero_pms && (
+                      {visibleColumns.bat && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'numero_pms', row.numero_pms)}
+                          {renderInlineBat(row)}
                         </td>
                       )}
-                      {visibleColumns.commercial_en_charge && (
+                      {visibleColumns.express && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {row.commercial_en_charge}
-                        </td>
-                      )}
-                      {visibleColumns.statut && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineStatus(row)}
-                        </td>
-                      )}
-                      {visibleColumns.etape && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'etape', etapeOptions)}
-                        </td>
-                      )}
-                      {visibleColumns.atelier_concerne && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
+                          {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {visibleColumns.infograph_en_charge && (
@@ -1472,9 +1535,24 @@ const DashboardPageClean = () => {
                           {renderInlineText(row, 'infograph_en_charge', row.infograph_en_charge)}
                         </td>
                       )}
+                      {visibleColumns.numero_pms && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'numero_pms', row.numero_pms)}
+                        </td>
+                      )}
+                      {visibleColumns.etape && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineSelect(row, 'etape', etapeOptions)}
+                        </td>
+                      )}
                       {visibleColumns.agent_impression && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'agent_impression', row.agent_impression)}
+                        </td>
+                      )}
+                      {visibleColumns.statut && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineStatus(row)}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_estimee && (
@@ -1482,19 +1560,25 @@ const DashboardPageClean = () => {
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
                         </td>
                       )}
+                      {/* Other columns for non-infograph/atelier roles */}
+                      {visibleColumns.numero_affaire && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
+                        </td>
+                      )}
+                      {visibleColumns.numero_dm && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'numero_dm', row.numero_dm)}
+                        </td>
+                      )}
+                      {visibleColumns.commercial_en_charge && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {row.commercial_en_charge}
+                        </td>
+                      )}
                       {visibleColumns.estimated_work_time_minutes && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
-                        </td>
-                      )}
-                      {visibleColumns.bat && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'bat', batOptions)}
-                        </td>
-                      )}
-                      {visibleColumns.express && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {canDeleteOrders() && (

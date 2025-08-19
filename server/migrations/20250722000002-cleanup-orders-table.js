@@ -33,7 +33,7 @@ module.exports = {
     await queryInterface.addColumn('orders', 'etape', {
       type: Sequelize.STRING,
       allowNull: true,
-      comment: 'Stade du projet (pré-presse, impression, etc.)'
+      comment: 'Stade du projet (conception, pré-presse, travail graphique, impression, finition)'
     });
 
     await queryInterface.addColumn('orders', 'option_finition', {

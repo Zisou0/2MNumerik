@@ -57,15 +57,8 @@ class OrderController {
         productWhere.statut = { [Op.notIn]: ['annule', 'livre'] };
       }
       
-      // Role-based filtering - now applied at product level
-      const userRole = req.user.role;
-      if (userRole === 'atelier') {
-        // Atelier can only see products with etape 'impression' or 'finition' or 'découpe'
-        productWhere.etape = { [Op.in]: ['impression', 'finition', 'découpe'] };
-      } else if (userRole === 'infograph') {
-        // Infograph can see products with etape: conception, pré-presse, impression, finition, découpe
-        productWhere.etape = { [Op.in]: ['conception', 'pré-presse', 'impression', 'finition', 'découpe'] };
-      }
+      // Note: Role-based filtering removed - all users can now filter by any etape
+      // The etape filter was already set above on line 40: if (etape) productWhere.etape = etape;
       
       // Handle client filtering separately if not part of search
       if (client && !search) {
@@ -322,11 +315,11 @@ class OrderController {
       const userRole = req.user.role;
       
       if (userRole === 'atelier') {
-        // Atelier can only see orders with etape 'impression' or 'decoupe'
-        whereClause.etape = { [Op.in]: ['impression', 'decoupe'] };
+        // Atelier can only see orders with etape 'impression'
+        whereClause.etape = { [Op.in]: ['impression'] };
       } else if (userRole === 'infograph') {
-        // Infograph can see orders with etape: conception, pré-presse, impression, finition, découpe
-        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'impression', 'finition', 'découpe'] };
+        // Infograph can see orders with etape: conception, pré-presse, travail graphique, impression, finition
+        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
       }
       // Commercial (or any other role) can see everything - no additional filtering
       
@@ -652,24 +645,25 @@ class OrderController {
           // Commercial can change etape from undefined to 'conception'
           if (order.etape === null && etape === 'conception') {
             // Allowed transition
-          } else if (['conception', 'pré-presse', 'impression', 'finition', 'découpe', 'impression-decoupe'].includes(etape)) {
+          } else if (['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'].includes(etape)) {
             // Commercial can set any etape
           } else {
             await transaction.rollback();
             return res.status(400).json({ message: 'Étape non valide' });
           }
         } else if (userRole === 'infograph') {
-          // Infograph can transition: conception -> pré-presse -> impression -> finition/découpe
+          // Infograph can transition: conception -> pré-presse -> travail graphique -> impression -> finition
           if ((order.etape === 'conception' && etape === 'pré-presse') ||
-              (order.etape === 'pré-presse' && etape === 'impression') ||
-              (order.etape === 'impression' && ['finition', 'découpe'].includes(etape))) {
+              (order.etape === 'pré-presse' && etape === 'travail graphique') ||
+              (order.etape === 'travail graphique' && etape === 'impression') ||
+              (order.etape === 'impression' && etape === 'finition')) {
             // Allowed transitions
           } else {
             await transaction.rollback();
             return res.status(400).json({ message: 'Transition d\'étape non autorisée pour votre rôle' });
           }
         } else if (userRole === 'atelier') {
-          // Atelier can only work on 'impression' and 'decoupe' orders but cannot change etape
+          // Atelier can only work on 'impression' orders but cannot change etape
           // Only prevent the update if they're actually trying to change the etape
           if (etape !== undefined && etape !== order.etape) {
             await transaction.rollback();
@@ -887,11 +881,11 @@ class OrderController {
       const userRole = req.user.role;
       
       if (userRole === 'atelier') {
-        // Atelier can only see orders with etape 'impression' or 'decoupe'
-        whereClause.etape = { [Op.in]: ['impression', 'decoupe'] };
+        // Atelier can only see orders with etape 'impression'
+        whereClause.etape = { [Op.in]: ['impression'] };
       } else if (userRole === 'infograph') {
-        // Infograph can see orders with etape: conception, pré-presse, impression, finition, découpe
-        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'impression', 'finition', 'découpe'] };
+        // Infograph can see orders with etape: conception, pré-presse, travail graphique, impression, finition
+        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
       }
       // Commercial (or any other role) can see everything - no additional filtering
 
@@ -937,11 +931,11 @@ class OrderController {
       // Apply role-based filtering at product level
       const userRole = req.user.role;
       if (userRole === 'atelier') {
-        // Atelier can only see products with etape 'impression' or 'finition' or 'découpe'
-        productWhere.etape = { [Op.in]: ['impression', 'finition', 'découpe'] };
+        // Atelier can only see products with etape 'impression' or 'finition'
+        productWhere.etape = { [Op.in]: ['impression', 'finition'] };
       } else if (userRole === 'infograph') {
-        // Infograph can see products with etape: conception, pré-presse, impression, finition, découpe
-        productWhere.etape = { [Op.in]: ['conception', 'pré-presse', 'impression', 'finition', 'découpe'] };
+        // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition
+        productWhere.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
       }
 
       // Query OrderProduct table to get stats at product level
