@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { orderAPI } from '../utils/api'
+import { orderAPI, userAPI } from '../utils/api'
 import Button from '../components/ButtonComponent'
 import Input from '../components/InputComponent'
 import AlertDialog from '../components/AlertDialog'
@@ -39,9 +39,11 @@ const DashboardPageClean = () => {
     client: '',
     atelier: '',
     infograph: '',
+    agent_impression: '',
     etape: '',
     express: '',
     bat: '',
+    pack_fin_annee: '',
     search: '',
     date_from: '',
     date_to: '',
@@ -62,6 +64,15 @@ const DashboardPageClean = () => {
   const [pendingStatusChange, setPendingStatusChange] = useState(null) // { orderProductId, newValue } | null
   const [showStatusConfirmDialog, setShowStatusConfirmDialog] = useState(false)
   
+  // Problème technique dialog
+  const [showProblemeDialog, setShowProblemeDialog] = useState(false)
+  const [pendingProblemeChange, setPendingProblemeChange] = useState(null) // { orderProductId, newValue } | null
+  const [problemeDescription, setProblemeDescription] = useState('')
+  
+  // Users for dropdowns
+  const [infographUsers, setInfographUsers] = useState([])
+  const [atelierUsers, setAtelierUsers] = useState([])
+  
   // Time-based refresh
   const [currentTime, setCurrentTime] = useState(new Date())
   
@@ -74,10 +85,28 @@ const DashboardPageClean = () => {
     { value: 'annule', label: 'Annulé' }
   ]
   
-  const atelierOptions = ['petit format', 'grand format', 'sous-traitance']
+  const atelierOptions = ['petit format', 'grand format', 'sous-traitance', 'service crea']
   
   // All users can now filter by any etape
   const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition']
+  
+  // Helper function to get etape options based on atelier_concerne
+  const getEtapeOptionsByAtelier = (atelierConcerne) => {
+    if (!atelierConcerne) return []
+    
+    const atelier = atelierConcerne.toLowerCase()
+    
+    if (atelier === 'petit format' || atelier === 'grand format') {
+      return ['pré-presse', 'impression', 'finition']
+    } else if (atelier === 'service crea') {
+      return ['travail graphique', 'conception']
+    } else if (atelier === 'sous-traitance') {
+      return []
+    }
+    
+    // Default fallback
+    return etapeOptions
+  }
   
   const batOptions = [
     { value: 'avec', label: 'Avec' },
@@ -86,6 +115,11 @@ const DashboardPageClean = () => {
   const expressOptions = [
     { value: 'oui', label: 'Oui' },
     { value: 'non', label: 'Non' }
+  ]
+
+  const packFinAnneeOptions = [
+    { value: 'true', label: 'Oui' },
+    { value: 'false', label: 'Non' }
   ]
 
   // Convert flattened orderProductRows back to orders format for notifications
@@ -141,15 +175,17 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: false,
         date_limite_livraison_attendue: true,
+        date_limite_livraison_client: true, // New column for client deadline
         statut: true,
         etape: true,
         atelier_concerne: false,
         infograph_en_charge: false,
-        date_limite_livraison_estimee: false,
+        date_limite_livraison_estimee: true,
         estimated_work_time_minutes: false,
         bat: false,
         express: false,
-        commentaires: true
+        pack_fin_annee: true,
+        commentaires: false
       }
     } else if (user?.role === 'infograph' || user?.role === 'atelier') {
       // For infograph and atelier users: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais
@@ -162,6 +198,7 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: true,
         date_limite_livraison_attendue: false,
+        date_limite_livraison_client: false, // Hidden for infograph/atelier
         statut: true,
         etape: true,
         atelier_concerne: true,
@@ -171,6 +208,7 @@ const DashboardPageClean = () => {
         estimated_work_time_minutes: false,
         bat: true,
         express: true,
+        pack_fin_annee: true,
         commentaires: false
       }
     } else {
@@ -184,6 +222,7 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: true,
         date_limite_livraison_attendue: true,
+        date_limite_livraison_client: true, // Admin sees all columns including client deadline
         statut: true,
         etape: true,
         atelier_concerne: true,
@@ -193,6 +232,7 @@ const DashboardPageClean = () => {
         estimated_work_time_minutes: true,
         bat: true,
         express: true,
+        pack_fin_annee: true,
         commentaires: true
       }
     }
@@ -243,6 +283,7 @@ const DashboardPageClean = () => {
               estimated_work_time_minutes: orderProduct.estimated_work_time_minutes,
               bat: orderProduct.bat,
               express: orderProduct.express,
+              pack_fin_annee: orderProduct.pack_fin_annee,
               commentaires: orderProduct.commentaires,
               finitions: orderProduct.finitions || [], // Legacy finitions field for backward compatibility
               orderProductFinitions: orderProduct.orderProductFinitions || [], // New finitions structure
@@ -279,6 +320,20 @@ const DashboardPageClean = () => {
       setStats(response.stats)
     } catch (err) {
       console.error('Error fetching stats:', err)
+    }
+  }
+
+  // Fetch users by role for dropdowns
+  const fetchUsersByRole = async () => {
+    try {
+      const [infographResponse, atelierResponse] = await Promise.all([
+        userAPI.getUsers({ role: 'infograph' }),
+        userAPI.getUsers({ role: 'atelier' })
+      ])
+      setInfographUsers(infographResponse.users || [])
+      setAtelierUsers(atelierResponse.users || [])
+    } catch (err) {
+      console.error('Error fetching users:', err)
     }
   }
 
@@ -426,13 +481,17 @@ const DashboardPageClean = () => {
   const isFieldEditable = (field) => {
     const editableFields = {
       admin: 'all', // Admin can edit everything
-      commercial: 'all', // Commercial can edit everything
+      commercial: [
+        'numero_affaire', 'numero_dm', 'commercial_en_charge', 'date_limite_livraison_attendue',
+        'quantity', 'numero_pms', 'statut', 'etape', 'atelier_concerne', 
+        'infograph_en_charge', 'estimated_work_time_minutes', 'bat', 'express', 'pack_fin_annee', 'commentaires', 'finitions'
+      ], // Commercial can edit everything except 'date_limite_livraison_estimee' (délais)
       infograph: [
         'quantity', 'numero_pms', 'statut', 'etape', 'atelier_concerne', 
         'infograph_en_charge', 'date_limite_livraison_estimee', 
-        'estimated_work_time_minutes', 'bat', 'express', 'commentaires', 'finitions'
+        'estimated_work_time_minutes', 'bat', 'express', 'pack_fin_annee', 'commentaires', 'finitions'
       ], // Infograph can edit product-level fields
-      atelier: ['statut', 'etape', 'atelier_concerne', 'agent_impression', 'commentaires'] // Atelier can edit limited fields
+      atelier: ['statut', 'etape', 'atelier_concerne', 'agent_impression', 'commentaires', 'date_limite_livraison_estimee', 'pack_fin_annee'] // Atelier can edit limited fields including délais
     }
     
     const userRole = user?.role || 'guest'
@@ -532,6 +591,66 @@ const DashboardPageClean = () => {
     }
   }
 
+  // Handle problème technique status change with issue description
+  const saveProblemeEdit = async (orderProductId, newValue, issueDescription) => {
+    try {
+      // Find the order product row to get orderId and productId
+      const orderProductRow = orderProductRows.find(row => row.orderProductId === orderProductId)
+      if (!orderProductRow) return
+
+      // Append new issue to existing comments
+      const existingComments = orderProductRow.commentaires || ''
+      const newComments = existingComments 
+        ? `${existingComments}\n\n[Problème technique] ${issueDescription}`
+        : `[Problème technique] ${issueDescription}`
+
+      // Update both status and commentaires
+      const updateData = {
+        statut: newValue,
+        commentaires: newComments
+      }
+
+      // Use the actual product_id, not the orderProduct.id
+      await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.product_id, updateData)
+
+      // Update local state
+      setOrderProductRows(orderProductRows.map(row => 
+        row.orderProductId === orderProductId ? { 
+          ...row, 
+          statut: newValue,
+          commentaires: newComments
+        } : row
+      ))
+
+      // Update selectedOrder if modal is open and it's the same order
+      if (selectedOrder && showViewModal && orderProductRow.orderId === selectedOrder.id) {
+        const updatedSelectedOrder = { ...selectedOrder }
+        
+        // Update product-level fields in the first orderProduct
+        if (updatedSelectedOrder.orderProducts && updatedSelectedOrder.orderProducts.length > 0) {
+          updatedSelectedOrder.orderProducts[0] = {
+            ...updatedSelectedOrder.orderProducts[0],
+            statut: newValue,
+            commentaires: newComments
+          }
+        }
+        
+        setSelectedOrder(updatedSelectedOrder)
+      }
+
+      // Clear editing state
+      const editKey = `${orderProductId}-statut`
+      setInlineEditing({ ...inlineEditing, [editKey]: false })
+      setTempValues({ ...tempValues, [editKey]: null })
+
+      // Refresh stats since status changed
+      fetchStats()
+    } catch (err) {
+      setError('Erreur lors de la mise à jour')
+      cancelInlineEdit(orderProductId, 'statut')
+    }
+  }
+
   // Render inline editing components
   const renderInlineText = (orderProductRow, field, displayValue) => {
     const editKey = `${orderProductRow.orderProductId}-${field}`
@@ -539,6 +658,30 @@ const DashboardPageClean = () => {
     const tempValue = tempValues[editKey]
 
     if (isEditing) {
+      const inputType = field === 'commentaires' ? 'textarea' : 'text'
+      
+      if (inputType === 'textarea') {
+        return (
+          <div className="inline-edit">
+            <textarea
+              value={tempValue || ''}
+              onChange={(e) => handleTempValueChange(orderProductRow.orderProductId, field, e.target.value)}
+              onBlur={() => saveInlineEdit(orderProductRow.orderProductId, field, tempValue)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                  saveInlineEdit(orderProductRow.orderProductId, field, tempValue)
+                } else if (e.key === 'Escape') {
+                  cancelInlineEdit(orderProductRow.orderProductId, field)
+                }
+              }}
+              className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full resize-none h-20"
+              autoFocus
+              placeholder="Ctrl+Enter pour sauvegarder"
+            />
+          </div>
+        )
+      }
+      
       return (
         <div className="inline-edit">
           <input
@@ -561,6 +704,30 @@ const DashboardPageClean = () => {
     }
 
     const fieldEditable = isFieldEditable(field)
+
+    // Special handling for commentaires field
+    if (field === 'commentaires') {
+      const truncatedValue = displayValue && displayValue.length > 50 
+        ? displayValue.substring(0, 47) + '...' 
+        : displayValue
+
+      return (
+        <div 
+          className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+          onClick={() => handleInlineEdit(orderProductRow.orderProductId, field, orderProductRow[field] || '')}
+          title={!fieldEditable ? "Lecture seule" : `${displayValue || 'Cliquer pour modifier'}`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="truncate">{truncatedValue}</span>
+            {fieldEditable && (
+              <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            )}
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div 
@@ -812,6 +979,79 @@ const DashboardPageClean = () => {
     )
   }
 
+  const renderInlineAtelier = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-atelier_concerne`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'atelier_concerne', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'atelier_concerne', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'atelier_concerne')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'atelier_concerne')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          >
+            <option value="">-</option>
+            {atelierOptions.map(option => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('atelier_concerne')
+    const atelierValue = orderProductRow.atelier_concerne
+
+    // Get background color based on atelier value
+    const getAtelierBackgroundClass = (value) => {
+      if (value === 'grand format') {
+        return 'bg-green-100 text-green-800 border border-green-200'
+      } else if (value === 'petit format') {
+        return 'bg-blue-100 text-blue-800 border border-blue-200'
+      } else if (value === 'sous-traitance') {
+        return 'bg-orange-100 text-orange-800 border border-orange-200'
+      } else if (value === 'service crea') {
+        return 'bg-purple-100 text-purple-800 border border-purple-200'
+      } else {
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
+      }
+    }
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:opacity-80 px-2 py-1 rounded transition-all duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'atelier_concerne', orderProductRow.atelier_concerne)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getAtelierBackgroundClass(atelierValue)}`}>
+            {atelierValue || '-'}
+          </span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const renderInlineStatus = (orderProductRow) => {
     const editKey = `${orderProductRow.orderProductId}-statut`
     const isEditing = inlineEditing[editKey]
@@ -828,6 +1068,10 @@ const DashboardPageClean = () => {
               if (newValue === 'livre' || newValue === 'annule') {
                 setPendingStatusChange({ orderProductId: orderProductRow.orderProductId, newValue })
                 setShowStatusConfirmDialog(true)
+              } else if (newValue === 'problem_technique') {
+                setPendingProblemeChange({ orderProductId: orderProductRow.orderProductId, newValue })
+                setProblemeDescription('')
+                setShowProblemeDialog(true)
               } else {
                 saveInlineEdit(orderProductRow.orderProductId, 'statut', newValue)
               }
@@ -861,6 +1105,250 @@ const DashboardPageClean = () => {
       >
         <div className="flex items-center gap-2">
           {getStatusBadge(orderProductRow.statut)}
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInlineInfograph = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-infograph_en_charge`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'infograph_en_charge', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'infograph_en_charge', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'infograph_en_charge')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'infograph_en_charge')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full"
+            autoFocus
+          >
+            <option value="">-</option>
+            {infographUsers.map(user => (
+              <option key={user.id} value={user.username}>
+                {user.username}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('infograph_en_charge')
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'infograph_en_charge', orderProductRow.infograph_en_charge)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span>{orderProductRow.infograph_en_charge || '-'}</span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInlineAgentImpression = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-agent_impression`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'agent_impression', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'agent_impression', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'agent_impression')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'agent_impression')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full"
+            autoFocus
+          >
+            <option value="">-</option>
+            {atelierUsers.map(user => (
+              <option key={user.id} value={user.username}>
+                {user.username}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('agent_impression')
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'agent_impression', orderProductRow.agent_impression)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span>{orderProductRow.agent_impression || '-'}</span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInlinePackFinAnnee = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-pack_fin_annee`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value === 'true'
+              handleTempValueChange(orderProductRow.orderProductId, 'pack_fin_annee', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'pack_fin_annee', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'pack_fin_annee')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'pack_fin_annee')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          >
+            <option value="false">Non</option>
+            <option value="true">Oui</option>
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('pack_fin_annee')
+    const packValue = orderProductRow.pack_fin_annee
+
+    // Get background color based on pack value
+    const getPackBackgroundClass = (value) => {
+      if (value === true || value === 'true') {
+        return 'bg-purple-100 text-purple-800 border border-purple-200'
+      } else {
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
+      }
+    }
+
+    const getPackLabel = (value) => {
+      return (value === true || value === 'true') ? 'Oui' : 'Non'
+    }
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:opacity-80 px-2 py-1 rounded transition-all duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'pack_fin_annee', orderProductRow.pack_fin_annee)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPackBackgroundClass(packValue)}`}>
+            {getPackLabel(packValue)}
+          </span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInlineEtape = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-etape`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    // Get dynamic options based on atelier_concerne
+    const dynamicEtapeOptions = getEtapeOptionsByAtelier(orderProductRow.atelier_concerne)
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'etape', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'etape', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'etape')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'etape')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          >
+            <option value="">-</option>
+            {dynamicEtapeOptions.map(etape => (
+              <option key={etape} value={etape}>
+                {etape}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('etape')
+
+    // If no options available for this atelier, show as read-only
+    if (dynamicEtapeOptions.length === 0) {
+      return (
+        <div className="px-2 py-1 inline-edit">
+          <span className="text-gray-400">-</span>
+        </div>
+      )
+    }
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'etape', orderProductRow.etape)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span>{orderProductRow.etape || '-'}</span>
           {fieldEditable && (
             <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -907,6 +1395,7 @@ const DashboardPageClean = () => {
         estimated_work_time_minutes: orderProductRow.estimated_work_time_minutes,
         bat: orderProductRow.bat,
         express: orderProductRow.express,
+        pack_fin_annee: orderProductRow.pack_fin_annee,
         commentaires: orderProductRow.commentaires,
         finitions: orderProductRow.finitions || [], // Legacy finitions for backward compatibility
         orderProductFinitions: orderProductRow.orderProductFinitions || [] // New finitions structure
@@ -952,6 +1441,7 @@ const DashboardPageClean = () => {
         estimated_work_time_minutes: orderProductRow.estimated_work_time_minutes,
         bat: orderProductRow.bat,
         express: orderProductRow.express,
+        pack_fin_annee: orderProductRow.pack_fin_annee,
         commentaires: orderProductRow.commentaires,
         statut: orderProductRow.statut,
         finitions: orderProductRow.finitions || [], // Legacy finitions for backward compatibility
@@ -992,6 +1482,7 @@ const DashboardPageClean = () => {
   useEffect(() => {
     fetchOrders()
     fetchStats()
+    fetchUsersByRole()
   }, [filters])
 
   useEffect(() => {
@@ -1074,11 +1565,11 @@ const DashboardPageClean = () => {
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-3 flex-1">
-              {/* Search Field */}
+              {/* PMS Search Field */}
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Rechercher (N° affaire, client, produit...)"
+                  placeholder="Rechercher par N° PMS"
                   value={filters.search || ''}
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                   className="px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64"
@@ -1143,6 +1634,15 @@ const DashboardPageClean = () => {
                 ))}
               </select>
 
+              {/* Agent Impression Filter */}
+              <input
+                type="text"
+                placeholder="Agent impression"
+                value={filters.agent_impression}
+                onChange={(e) => setFilters({ ...filters, agent_impression: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+
               {/* Etape Filter */}
               <select
                 value={filters.etape}
@@ -1179,6 +1679,17 @@ const DashboardPageClean = () => {
                 <option value="sans">Sans BAT</option>
               </select>
 
+              {/* Pack Fin d'Année Filter */}
+              <select
+                value={filters.pack_fin_annee || ''}
+                onChange={(e) => setFilters({ ...filters, pack_fin_annee: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Pack fin d'année</option>
+                <option value="true">Oui</option>
+                <option value="false">Non</option>
+              </select>
+
               {/* Clear Filters */}
               {Object.values(filters).some(v => v !== '' && v !== 'all') && (
                 <button
@@ -1188,9 +1699,11 @@ const DashboardPageClean = () => {
                     client: '',
                     atelier: '',
                     infograph: '',
+                    agent_impression: '',
                     etape: '',
                     express: '',
                     bat: '',
+                    pack_fin_annee: '',
                     search: '',
                     date_from: '',
                     date_to: '',
@@ -1296,6 +1809,11 @@ const DashboardPageClean = () => {
                     Express
                   </th>
                 )}
+                {visibleColumns.pack_fin_annee && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pack fin d'année
+                  </th>
+                )}
                 {visibleColumns.infograph_en_charge && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Graphiste
@@ -1326,6 +1844,11 @@ const DashboardPageClean = () => {
                     Délais
                   </th>
                 )}
+                {visibleColumns.date_limite_livraison_client && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Délai Client
+                  </th>
+                )}
                 {/* Other columns for non-infograph/atelier roles */}
                 {visibleColumns.numero_affaire && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1345,6 +1868,11 @@ const DashboardPageClean = () => {
                 {visibleColumns.estimated_work_time_minutes && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Temps (min)
+                  </th>
+                )}
+                {visibleColumns.commentaires && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Commentaires
                   </th>
                 )}
                 {canDeleteOrders() && (
@@ -1378,7 +1906,7 @@ const DashboardPageClean = () => {
                       {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
                       {visibleColumns.atelier_concerne && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
+                          {renderInlineAtelier(row)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
@@ -1406,9 +1934,14 @@ const DashboardPageClean = () => {
                           {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
+                      {visibleColumns.pack_fin_annee && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlinePackFinAnnee(row)}
+                        </td>
+                      )}
                       {visibleColumns.infograph_en_charge && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'infograph_en_charge', row.infograph_en_charge)}
+                          {renderInlineInfograph(row)}
                         </td>
                       )}
                       {visibleColumns.numero_pms && (
@@ -1418,12 +1951,12 @@ const DashboardPageClean = () => {
                       )}
                       {visibleColumns.etape && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'etape', etapeOptions)}
+                          {renderInlineEtape(row)}
                         </td>
                       )}
                       {visibleColumns.agent_impression && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'agent_impression', row.agent_impression)}
+                          {renderInlineAgentImpression(row)}
                         </td>
                       )}
                       {visibleColumns.statut && (
@@ -1434,6 +1967,11 @@ const DashboardPageClean = () => {
                       {visibleColumns.date_limite_livraison_estimee && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
+                        </td>
+                      )}
+                      {visibleColumns.date_limite_livraison_client && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineDate(row, 'date_limite_livraison_attendue')}
                         </td>
                       )}
                       {/* Other columns for non-infograph/atelier roles */}
@@ -1455,6 +1993,11 @@ const DashboardPageClean = () => {
                       {visibleColumns.estimated_work_time_minutes && (
                         <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
+                        </td>
+                      )}
+                      {visibleColumns.commentaires && (
+                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'commentaires', row.commentaires || '-')}
                         </td>
                       )}
                       {canDeleteOrders() && (
@@ -1502,7 +2045,7 @@ const DashboardPageClean = () => {
                       {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
                       {visibleColumns.atelier_concerne && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'atelier_concerne', atelierOptions)}
+                          {renderInlineAtelier(row)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
@@ -1530,9 +2073,14 @@ const DashboardPageClean = () => {
                           {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
+                      {visibleColumns.pack_fin_annee && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlinePackFinAnnee(row)}
+                        </td>
+                      )}
                       {visibleColumns.infograph_en_charge && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'infograph_en_charge', row.infograph_en_charge)}
+                          {renderInlineInfograph(row)}
                         </td>
                       )}
                       {visibleColumns.numero_pms && (
@@ -1542,12 +2090,12 @@ const DashboardPageClean = () => {
                       )}
                       {visibleColumns.etape && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineSelect(row, 'etape', etapeOptions)}
+                          {renderInlineEtape(row)}
                         </td>
                       )}
                       {visibleColumns.agent_impression && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {renderInlineText(row, 'agent_impression', row.agent_impression)}
+                          {renderInlineAgentImpression(row)}
                         </td>
                       )}
                       {visibleColumns.statut && (
@@ -1558,6 +2106,11 @@ const DashboardPageClean = () => {
                       {visibleColumns.date_limite_livraison_estimee && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
+                        </td>
+                      )}
+                      {visibleColumns.date_limite_livraison_client && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineDate(row, 'date_limite_livraison_attendue')}
                         </td>
                       )}
                       {/* Other columns for non-infograph/atelier roles */}
@@ -1579,6 +2132,11 @@ const DashboardPageClean = () => {
                       {visibleColumns.estimated_work_time_minutes && (
                         <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
+                        </td>
+                      )}
+                      {visibleColumns.commentaires && (
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineText(row, 'commentaires', row.commentaires || '-')}
                         </td>
                       )}
                       {canDeleteOrders() && (
@@ -1733,6 +2291,49 @@ const DashboardPageClean = () => {
           confirmText="Confirmer"
           cancelText="Annuler"
           type="warning"
+        />
+      )}
+
+      {/* Problème technique dialog */}
+      {showProblemeDialog && pendingProblemeChange && (
+        <AlertDialog
+          isOpen={showProblemeDialog}
+          onClose={() => {
+            setShowProblemeDialog(false)
+            setPendingProblemeChange(null)
+            setProblemeDescription('')
+            // Cancel inline edit as well
+            if (pendingProblemeChange) {
+              cancelInlineEdit(pendingProblemeChange.orderProductId, 'statut')
+            }
+          }}
+          onConfirm={() => {
+            if (pendingProblemeChange && problemeDescription.trim()) {
+              saveProblemeEdit(pendingProblemeChange.orderProductId, pendingProblemeChange.newValue, problemeDescription.trim())
+              setShowProblemeDialog(false)
+              setPendingProblemeChange(null)
+              setProblemeDescription('')
+            }
+          }}
+          title="Problème technique"
+          message={
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Veuillez décrire le problème technique rencontré :
+              </p>
+              <textarea
+                value={problemeDescription}
+                onChange={(e) => setProblemeDescription(e.target.value)}
+                placeholder="Décrivez le problème..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 resize-none h-24 text-sm"
+                autoFocus
+              />
+            </div>
+          }
+          confirmText="Confirmer"
+          cancelText="Annuler"
+          type="warning"
+          confirmDisabled={!problemeDescription.trim()}
         />
       )}
     </div>

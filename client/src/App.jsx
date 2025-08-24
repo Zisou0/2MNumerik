@@ -79,7 +79,14 @@ function AppRoutes() {
         
         <Route path="dashboard" element={<DashboardPageClean />} />
         <Route path="history" element={<HistoryOrdersPage />} />
-        <Route path="products" element={<ProductsPage />} />
+        <Route 
+          path="products" 
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <ProductsPage />
+            </ProtectedRoute>
+          } 
+        />
         <Route path="clients" element={<ClientsPage />} />
         <Route 
           path="atelier-tasks" 

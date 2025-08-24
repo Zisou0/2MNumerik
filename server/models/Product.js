@@ -23,6 +23,15 @@ module.exports = (sequelize) => {
         min: 1
       },
       comment: 'Estimated creation time in minutes'
+    },
+    atelier_type: {
+      type: DataTypes.ENUM('petit_format', 'grand_format', 'sous_traitance', 'service_crea'),
+      allowNull: true,
+      defaultValue: null,
+      validate: {
+        isIn: [['petit_format', 'grand_format', 'sous_traitance', 'service_crea']]
+      },
+      comment: 'Type d\'atelier assigné au produit'
     }
   }, {
     tableName: 'products',

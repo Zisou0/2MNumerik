@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { orderAPI, productAPI, apiCall } from '../utils/api'
 import Button from './ButtonComponent'
@@ -28,6 +28,12 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   const [loading, setLoading] = useState(false)
   const [productsLoading, setProductsLoading] = useState(true)
   const [error, setError] = useState('')
+  
+  // Finition search state - object with keys as `${productIndex}-${finitionId}` for each product
+  const [finitionSearchStates, setFinitionSearchStates] = useState({})
+  
+  // Refs for click-outside functionality
+  const finitionSearchRefs = useRef({})
 
   // Get fields visible for current user role
   const getVisibleFields = () => {
@@ -53,6 +59,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           estimated_work_time_minutes: false,
           bat: true,
           express: true,
+          pack_fin_annee: true,
           commentaires: true,
           finitions: false
         }
@@ -73,7 +80,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_pms: true,
           infograph_en_charge: true,
           agent_impression: true,
-          date_limite_livraison_estimee: true,
+          date_limite_livraison_estimee: false,
           etape: true,
           atelier_concerne: true,
           estimated_work_time_minutes: true,
@@ -98,7 +105,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_pms: true,
           infograph_en_charge: true,
           agent_impression: true,
-          date_limite_livraison_estimee: true,
+          date_limite_livraison_estimee: false,
           etape: true,
           atelier_concerne: true,
           estimated_work_time_minutes: true,
@@ -202,6 +209,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
             estimated_work_time_minutes: orderProduct.estimated_work_time_minutes || '',
             bat: orderProduct.bat || '',
             express: orderProduct.express || '',
+            pack_fin_annee: orderProduct.pack_fin_annee || '',
             commentaires: orderProduct.commentaires || '',
             finitions: finitions
           }
@@ -217,6 +225,24 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       }))
     }
   }, [order, user])
+
+  // Handle click outside for finition search dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      Object.keys(finitionSearchStates).forEach(key => {
+        const ref = finitionSearchRefs.current[key]
+        if (ref && !ref.contains(event.target) && finitionSearchStates[key]?.isOpen) {
+          const productIndex = parseInt(key.split('-')[1])
+          closeFinitionSearch(productIndex)
+        }
+      })
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [finitionSearchStates])
 
   // Handler functions
   const handleOrderFormChange = (field, value) => {
@@ -243,6 +269,27 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     }
   }
 
+  // Helper function to map atelier options to product atelier_type
+  const mapAtelierToType = (atelierOption) => {
+    const mapping = {
+      'petit format': 'petit_format',
+      'grand format': 'grand_format', 
+      'sous-traitance': 'sous_traitance',
+      'service crea': 'service_crea'
+    }
+    return mapping[atelierOption] || null
+  }
+
+  // Helper function to get filtered products based on selected atelier
+  const getFilteredProducts = (selectedAtelier) => {
+    if (!selectedAtelier) return []
+    
+    const atelierType = mapAtelierToType(selectedAtelier)
+    if (!atelierType) return availableProducts
+    
+    return availableProducts.filter(product => product.atelier_type === atelierType)
+  }
+
   const addProduct = () => {
     const newProduct = { 
       productId: '', 
@@ -252,12 +299,13 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       numero_pms: '',
       infograph_en_charge: '',
       agent_impression: '',
-      date_limite_livraison_estimee: '',
+      date_limite_livraison_estimee: orderFormData.date_limite_livraison_attendue || '',
       etape: 'pré-presse',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
       bat: '',
       express: '',
+      pack_fin_annee: '',
       commentaires: '',
       finitions: []
     }
@@ -271,7 +319,40 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   const updateProduct = (index, field, value) => {
     const updated = [...selectedProducts]
     updated[index] = { ...updated[index], [field]: value }
+    
+    // Auto-set etape based on atelier_concerne
+    if (field === 'atelier_concerne') {
+      if (value === 'petit format' || value === 'grand format') {
+        updated[index] = { ...updated[index], etape: 'pre-press' }
+      } else if (value === 'service crea') {
+        // For service crea, don't auto-set etape, let user choose between 'conception' and 'travail graphique'
+        updated[index] = { ...updated[index], etape: '' }
+      } else if (value === 'sous-traitance') {
+        // For sous-traitance, remove etape completely
+        updated[index] = { ...updated[index], etape: '' }
+      }
+    }
+    
     setSelectedProducts(updated)
+  }
+
+  // Helper function to get available etape options based on atelier
+  const getEtapeOptionsForAtelier = (atelierConcerne) => {
+    if (atelierConcerne === 'petit format' || atelierConcerne === 'grand format') {
+      return [
+        { value: 'pre-press', label: 'Pre-press' },
+        { value: 'impression', label: 'Impression' },
+        { value: 'finition', label: 'Finition' }
+      ]
+    } else if (atelierConcerne === 'service crea') {
+      return [
+        { value: 'conception', label: 'Conception' },
+        { value: 'travail graphique', label: 'Travail graphique' }
+      ]
+    } else if (atelierConcerne === 'sous-traitance') {
+      return [] // No etape for sous-traitance
+    }
+    return etapeOptions.map(etape => ({ value: etape, label: etape }))
   }
 
   // Step navigation
@@ -379,6 +460,64 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     setSelectedProducts(updated)
   }
 
+  // Finition search helper functions
+  const getFinitionSearchKey = (productIndex) => `product-${productIndex}`
+  
+  const initializeFinitionSearch = (productIndex) => {
+    const key = getFinitionSearchKey(productIndex)
+    if (!finitionSearchStates[key]) {
+      setFinitionSearchStates(prev => ({
+        ...prev,
+        [key]: {
+          searchTerm: '',
+          isOpen: false,
+          filteredFinitions: []
+        }
+      }))
+    }
+  }
+
+  const updateFinitionSearch = (productIndex, searchTerm) => {
+    const key = getFinitionSearchKey(productIndex)
+    const availableFinitions = getAvailableFinitionsForProduct(selectedProducts[productIndex].productId)
+    const filteredFinitions = availableFinitions
+      .filter(finition => !selectedProducts[productIndex].finitions?.some(f => f.finition_id === finition.id))
+      .filter(finition => finition.name.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    setFinitionSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        searchTerm,
+        isOpen: searchTerm.length > 0,
+        filteredFinitions
+      }
+    }))
+  }
+
+  const selectFinitionFromSearch = (productIndex, finition) => {
+    const key = getFinitionSearchKey(productIndex)
+    addFinitionToProduct(productIndex, finition.id)
+    setFinitionSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        searchTerm: '',
+        isOpen: false,
+        filteredFinitions: []
+      }
+    }))
+  }
+
+  const closeFinitionSearch = (productIndex) => {
+    const key = getFinitionSearchKey(productIndex)
+    setFinitionSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        isOpen: false
+      }
+    }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -414,6 +553,19 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         return
       }
 
+      if (visibleFields.productLevel.pack_fin_annee && !product.pack_fin_annee) {
+        setError(`Produit ${i + 1}: Veuillez sélectionner l'option pack fin d'année (oui/non)`)
+        setLoading(false)
+        return
+      }
+
+      // Validate that atelier_concerne is always required (moved up for better UX)
+      if (visibleFields.productLevel.atelier_concerne && !product.atelier_concerne) {
+        setError(`Produit ${i + 1}: Veuillez sélectionner un atelier concerné`)
+        setLoading(false)
+        return
+      }
+
       if (visibleFields.productLevel.bat && !product.bat) {
         setError(`Produit ${i + 1}: Veuillez sélectionner l'option BAT (avec/sans)`)
         setLoading(false)
@@ -421,11 +573,12 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       }
 
       // Optional: Validate atelier_concerne if required for certain roles
-      if (visibleFields.productLevel.atelier_concerne && user?.role !== 'commercial' && !product.atelier_concerne) {
-        setError(`Produit ${i + 1}: Veuillez sélectionner un atelier concerné`)
-        setLoading(false)
-        return
-      }
+      // This validation is now redundant since we check above for all users
+      // if (visibleFields.productLevel.atelier_concerne && user?.role !== 'commercial' && !product.atelier_concerne) {
+      //   setError(`Produit ${i + 1}: Veuillez sélectionner un atelier concerné`)
+      //   setLoading(false)
+      //   return
+      // }
     }
 
     try {
@@ -709,6 +862,39 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                 </button>
                               </div>
                               
+                              {/* Atelier concerné field - moved to top and made required */}
+                              {visibleFields.productLevel.atelier_concerne && (
+                                <div className="mb-6">
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Atelier concerné *
+                                  </label>
+                                  <select
+                                    value={product.atelier_concerne}
+                                    onChange={(e) => {
+                                      updateProduct(index, 'atelier_concerne', e.target.value)
+                                      // Reset product selection when atelier changes
+                                      if (product.productId) {
+                                        updateProduct(index, 'productId', '')
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                    required
+                                  >
+                                    <option value="">Sélectionner un atelier *</option>
+                                    {atelierOptions.map(atelier => (
+                                      <option key={atelier} value={atelier}>
+                                        {atelier}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {!product.atelier_concerne && (
+                                    <p className="mt-1 text-sm text-gray-500">
+                                      Vous devez d'abord sélectionner un atelier pour voir les produits disponibles
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Basic Product Selection */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                 <div>
@@ -720,14 +906,24 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                     onChange={(e) => updateProduct(index, 'productId', parseInt(e.target.value))}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                     required
+                                    disabled={!product.atelier_concerne}
                                   >
-                                    <option value="">Sélectionner un produit</option>
-                                    {availableProducts.map(p => (
+                                    <option value="">
+                                      {!product.atelier_concerne 
+                                        ? "Sélectionnez d'abord un atelier" 
+                                        : "Sélectionner un produit"}
+                                    </option>
+                                    {product.atelier_concerne && getFilteredProducts(product.atelier_concerne).map(p => (
                                       <option key={p.id} value={p.id}>
                                         {p.name} ({p.estimated_creation_time}h)
                                       </option>
                                     ))}
                                   </select>
+                                  {product.atelier_concerne && getFilteredProducts(product.atelier_concerne).length === 0 && (
+                                    <p className="mt-1 text-sm text-orange-600">
+                                      Aucun produit disponible pour l'atelier "{product.atelier_concerne}"
+                                    </p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -802,51 +998,48 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                     </div>
                                   )}
                                   
-                                  {visibleFields.productLevel.date_limite_livraison_estimee && (
-                                    <Input
-                                      label="Date limite estimée"
-                                      type="datetime-local"
-                                      value={product.date_limite_livraison_estimee}
-                                      onChange={(e) => updateProduct(index, 'date_limite_livraison_estimee', e.target.value)}
-                                    />
-                                  )}
+                                  {/* Date limite estimée is now automatically populated from order's date_limite_livraison_attendue */}
                                   
                                   {visibleFields.productLevel.etape && (
                                     <div>
                                       <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Étape
+                                        {product.atelier_concerne === 'sous-traitance' && (
+                                          <span className="text-gray-500 text-sm ml-2">(Non applicable pour sous-traitance)</span>
+                                        )}
                                       </label>
-                                      <select
-                                        value={product.etape}
-                                        onChange={(e) => updateProduct(index, 'etape', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                      >
-                                        {etapeOptions.map(etape => (
-                                          <option key={etape} value={etape}>
-                                            {etape}
+                                      {product.atelier_concerne === 'sous-traitance' ? (
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                                          Aucune étape requise
+                                        </div>
+                                      ) : (
+                                        <select
+                                          value={product.etape}
+                                          onChange={(e) => updateProduct(index, 'etape', e.target.value)}
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                        >
+                                          <option value="">
+                                            {!product.atelier_concerne 
+                                              ? "Sélectionnez d'abord un atelier" 
+                                              : "Sélectionner une étape"}
                                           </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  )}
-                                  
-                                  {visibleFields.productLevel.atelier_concerne && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Atelier concerné
-                                      </label>
-                                      <select
-                                        value={product.atelier_concerne}
-                                        onChange={(e) => updateProduct(index, 'atelier_concerne', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                      >
-                                        <option value="">Sélectionner un atelier</option>
-                                        {atelierOptions.map(atelier => (
-                                          <option key={atelier} value={atelier}>
-                                            {atelier}
-                                          </option>
-                                        ))}
-                                      </select>
+                                          {getEtapeOptionsForAtelier(product.atelier_concerne).map(option => (
+                                            <option key={option.value} value={option.value}>
+                                              {option.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
+                                      {(product.atelier_concerne === 'petit format' || product.atelier_concerne === 'grand format') && !product.etape && (
+                                        <p className="mt-1 text-sm text-blue-600">
+                                          Étape par défaut: "Pre-press". Vous pouvez changer vers "Impression" ou "Finition" selon l'avancement.
+                                        </p>
+                                      )}
+                                      {product.atelier_concerne === 'service crea' && !product.etape && (
+                                        <p className="mt-1 text-sm text-orange-600">
+                                          Veuillez choisir entre "Conception" et "Travail graphique"
+                                        </p>
+                                      )}
                                     </div>
                                   )}
                                   
@@ -903,6 +1096,24 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                     </div>
                                   )}
                                   
+                                  {visibleFields.productLevel.pack_fin_annee && (
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Pack fin d'année *
+                                      </label>
+                                      <select
+                                        value={product.pack_fin_annee}
+                                        onChange={(e) => updateProduct(index, 'pack_fin_annee', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                        required
+                                      >
+                                        <option value="">Sélectionner</option>
+                                        <option value="true">Oui</option>
+                                        <option value="false">Non</option>
+                                      </select>
+                                    </div>
+                                  )}
+                                  
                                   {visibleFields.productLevel.commentaires && (
                                     <div className="md:col-span-2 lg:col-span-3">
                                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -925,30 +1136,81 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                       Finitions
                                     </label>
-                                    <div className="relative">
-                                      <select
-                                        onChange={(e) => {
-                                          if (e.target.value) {
-                                            addFinitionToProduct(index, parseInt(e.target.value))
-                                            e.target.value = '' // Reset dropdown
-                                          }
-                                        }}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        disabled={!product.productId}
-                                      >
-                                        <option value="">
-                                          {!product.productId 
+                                    <div 
+                                      className="relative"
+                                      ref={(el) => {
+                                        if (el) {
+                                          finitionSearchRefs.current[getFinitionSearchKey(index)] = el
+                                        }
+                                      }}
+                                    >
+                                      <div className="relative">
+                                        <input
+                                          type="text"
+                                          value={finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || ''}
+                                          onChange={(e) => {
+                                            if (!product.productId) return
+                                            initializeFinitionSearch(index)
+                                            updateFinitionSearch(index, e.target.value)
+                                          }}
+                                          onFocus={() => {
+                                            if (!product.productId) return
+                                            initializeFinitionSearch(index)
+                                            updateFinitionSearch(index, finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || '')
+                                          }}
+                                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                          placeholder={!product.productId 
                                             ? "Sélectionnez d'abord un produit" 
-                                            : "Ajouter une finition"}
-                                        </option>
-                                        {product.productId && getAvailableFinitionsForProduct(product.productId)
-                                          .filter(finition => !product.finitions?.some(f => f.finition_id === finition.id))
-                                          .map(finition => (
-                                            <option key={finition.id} value={finition.id}>
-                                              {finition.name}
-                                            </option>
+                                            : "Rechercher une finition..."}
+                                          disabled={!product.productId}
+                                        />
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                          <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                          </svg>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Search Results Dropdown */}
+                                      {finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && 
+                                       finitionSearchStates[getFinitionSearchKey(index)]?.filteredFinitions.length > 0 && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                          {finitionSearchStates[getFinitionSearchKey(index)].filteredFinitions.map((finition) => (
+                                            <button
+                                              key={finition.id}
+                                              type="button"
+                                              onClick={() => selectFinitionFromSearch(index, finition)}
+                                              className="w-full px-3 py-2 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                            >
+                                              <div className="flex items-center justify-between">
+                                                <span className="font-medium">{finition.name}</span>
+                                                {finition.productFinition?.additional_cost > 0 && (
+                                                  <span className="text-sm text-gray-500">
+                                                    +{finition.productFinition.additional_cost}€
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {finition.description && (
+                                                <p className="text-sm text-gray-600 mt-1">{finition.description}</p>
+                                              )}
+                                            </button>
                                           ))}
-                                      </select>
+                                        </div>
+                                      )}
+                                      
+                                      {/* No Results Message */}
+                                      {finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && 
+                                       finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm.length > 0 &&
+                                       finitionSearchStates[getFinitionSearchKey(index)]?.filteredFinitions.length === 0 && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                                          <div className="text-center text-gray-500">
+                                            <svg className="w-6 h-6 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                            <p className="text-sm">Aucune finition trouvée pour "{finitionSearchStates[getFinitionSearchKey(index)].searchTerm}"</p>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                     {product.finitions && product.finitions.length > 0 && (
                                       <div className="mt-2 space-y-3">

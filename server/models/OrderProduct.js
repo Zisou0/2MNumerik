@@ -101,6 +101,12 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true,
       comment: 'Agent d\'impression assigné à ce produit spécifique'
+    },
+    pack_fin_annee: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Indique si ce produit fait partie d\'un pack fin d\'année'
     }
   }, {
     tableName: 'order_products',

@@ -7,6 +7,12 @@ const { authenticateToken, checkConnection } = require('../middleware/auth');
 router.use(checkConnection);
 router.use(authenticateToken);
 
+// Export dashboard table route
+router.get('/dashboard', ExportController.exportDashboardTable);
+
+// Export tasks table route
+router.get('/tasks', ExportController.exportTasksTable);
+
 // Export database route (admin only - handled in controller)
 router.get('/database', ExportController.exportDatabase);
 

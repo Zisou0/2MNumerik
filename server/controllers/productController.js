@@ -86,15 +86,22 @@ const getProductById = async (req, res) => {
 // Create a new product
 const createProduct = async (req, res) => {
   try {
-    const { name, estimated_creation_time } = req.body;
+    const { name, estimated_creation_time, atelier_type } = req.body;
     
     if (!name || !estimated_creation_time) {
       return res.status(400).json({ error: 'Name and estimated creation time are required' });
     }
+
+    // Validate atelier_type if provided
+    const validAtelierTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea'];
+    if (atelier_type && !validAtelierTypes.includes(atelier_type)) {
+      return res.status(400).json({ error: 'Invalid atelier type' });
+    }
     
     const product = await Product.create({
       name,
-      estimated_creation_time
+      estimated_creation_time,
+      atelier_type: atelier_type || null
     });
     
     res.status(201).json(product);
@@ -108,17 +115,24 @@ const createProduct = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, estimated_creation_time } = req.body;
+    const { name, estimated_creation_time, atelier_type } = req.body;
     
     const product = await Product.findByPk(id);
     
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    // Validate atelier_type if provided
+    const validAtelierTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea'];
+    if (atelier_type && !validAtelierTypes.includes(atelier_type)) {
+      return res.status(400).json({ error: 'Invalid atelier type' });
+    }
     
     await product.update({
       name: name || product.name,
-      estimated_creation_time: estimated_creation_time || product.estimated_creation_time
+      estimated_creation_time: estimated_creation_time || product.estimated_creation_time,
+      atelier_type: atelier_type !== undefined ? atelier_type : product.atelier_type
     });
     
     res.json(product);

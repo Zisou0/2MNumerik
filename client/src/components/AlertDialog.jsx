@@ -8,7 +8,8 @@ function AlertDialog({
   message = "Êtes-vous sûr de vouloir continuer ?",
   confirmText = "Confirmer",
   cancelText = "Annuler",
-  type = "warning" // warning, danger, info
+  type = "warning", // warning, danger, info
+  confirmDisabled = false // New prop to disable confirm button
 }) {
   const [isVisible, setIsVisible] = useState(false)
 
@@ -87,9 +88,15 @@ function AlertDialog({
                   {title}
                 </h3>
                 <div className="mt-2">
-                  <p className="text-sm text-gray-500">
-                    {message}
-                  </p>
+                  {typeof message === 'string' ? (
+                    <p className="text-sm text-gray-500">
+                      {message}
+                    </p>
+                  ) : (
+                    <div className="text-sm text-gray-500">
+                      {message}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -97,7 +104,8 @@ function AlertDialog({
           <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
             <button
               type="button"
-              className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto ${getConfirmButtonColor()}`}
+              disabled={confirmDisabled}
+              className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto ${getConfirmButtonColor()} ${confirmDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={handleConfirm}
             >
               {confirmText}

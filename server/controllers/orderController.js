@@ -11,9 +11,12 @@ class OrderController {
         client, 
         atelier,
         infographe,
+        infograph, // Alternative parameter name for frontend compatibility
+        agent_impression, // Filter by atelier user (agent impression)
         etape,
         express,
         bat,
+        pack_fin_annee,
         search,
         date_from,
         date_to,
@@ -36,10 +39,19 @@ class OrderController {
       // Build product-level filters
       const productWhere = {};
       if (atelier) productWhere.atelier_concerne = atelier;
-      if (infographe) productWhere.infograph_en_charge = { [Op.like]: `%${infographe}%` };
+      if (infographe || infograph) productWhere.infograph_en_charge = { [Op.like]: `%${infographe || infograph}%` };
+      if (agent_impression) productWhere.agent_impression = { [Op.like]: `%${agent_impression}%` };
       if (etape) productWhere.etape = etape;
       if (express) productWhere.express = express;
       if (bat) productWhere.bat = bat;
+      if (pack_fin_annee !== undefined && pack_fin_annee !== '') {
+        productWhere.pack_fin_annee = pack_fin_annee === 'true';
+      }
+      
+      // PMS Search - only search in numero_pms field
+      if (search) {
+        productWhere.numero_pms = { [Op.like]: `%${search}%` };
+      }
       
       // Date range filtering for delivery dates
       if (date_from || date_to) {
@@ -62,10 +74,18 @@ class OrderController {
       
       // Handle client filtering separately if not part of search
       if (client && !search) {
-        whereClause[Op.or] = [
-          { client: { [Op.like]: `%${client}%` } }, // Legacy client field
-          { '$clientInfo.nom$': { [Op.like]: `%${client}%` } } // New client relationship
-        ];
+        // For complex queries with sorting by delivery date, we'll handle client filtering differently
+        // to avoid subquery issues with clientInfo joins
+        if (sortBy === 'date_limite_livraison_estimee') {
+          // Only use the legacy client field for the initial sorting query
+          whereClause.client = { [Op.like]: `%${client}%` };
+        } else {
+          // For simple queries, use both legacy and new client fields
+          whereClause[Op.or] = [
+            { client: { [Op.like]: `%${client}%` } }, // Legacy client field
+            { '$clientInfo.nom$': { [Op.like]: `%${client}%` } } // New client relationship
+          ];
+        }
       }
 
       // Time-based filtering
@@ -114,17 +134,31 @@ class OrderController {
       if (sortBy === 'date_limite_livraison_estimee') {
         // Special handling for sorting by product delivery dates
         // First, get order IDs sorted by earliest delivery date
+        
+        // Build include array for the first query
+        const firstQueryIncludes = [
+          {
+            model: OrderProduct,
+            as: 'orderProducts',
+            attributes: [],
+            where: Object.keys(productWhere).length > 0 ? productWhere : undefined,
+            required: Object.keys(productWhere).length > 0
+          }
+        ];
+        
+        // Add Client model if client filtering is needed
+        if (client && !search) {
+          firstQueryIncludes.push({
+            model: Client,
+            as: 'clientInfo',
+            attributes: [],
+            required: false
+          });
+        }
+        
         const orderedIds = await Order.findAll({
           attributes: ['id'],
-          include: [
-            {
-              model: OrderProduct,
-              as: 'orderProducts',
-              attributes: [],
-              where: Object.keys(productWhere).length > 0 ? productWhere : undefined,
-              required: Object.keys(productWhere).length > 0
-            }
-          ],
+          include: firstQueryIncludes,
           where: whereClause,
           group: ['Order.id'],
           order: [
@@ -152,10 +186,16 @@ class OrderController {
           });
         }
         
+        // Create a clean where clause without client filter since we already filtered by IDs
+        const cleanWhereClause = { ...whereClause };
+        if (client && !search) {
+          delete cleanWhereClause[Op.or];
+        }
+        
         // Now get the full data with proper includes
         queryOptions = {
           where: {
-            ...whereClause,
+            ...cleanWhereClause,
             id: { [Op.in]: orderIds }
           },
           include: [
@@ -244,17 +284,31 @@ class OrderController {
       if (sortBy === 'date_limite_livraison_estimee') {
         // Special handling for sorting by product delivery dates
         // First, get order IDs sorted by earliest delivery date
+        
+        // Build include array for the second query
+        const secondQueryIncludes = [
+          {
+            model: OrderProduct,
+            as: 'orderProducts',
+            attributes: [],
+            where: Object.keys(productWhere).length > 0 ? productWhere : undefined,
+            required: Object.keys(productWhere).length > 0
+          }
+        ];
+        
+        // Add Client model if client filtering is needed
+        if (client && !search) {
+          secondQueryIncludes.push({
+            model: Client,
+            as: 'clientInfo',
+            attributes: [],
+            required: false
+          });
+        }
+        
         const orderedIds = await Order.findAll({
           attributes: ['id'],
-          include: [
-            {
-              model: OrderProduct,
-              as: 'orderProducts',
-              attributes: [],
-              where: Object.keys(productWhere).length > 0 ? productWhere : undefined,
-              required: Object.keys(productWhere).length > 0
-            }
-          ],
+          include: secondQueryIncludes,
           where: whereClause,
           group: ['Order.id'],
           order: [
@@ -265,9 +319,15 @@ class OrderController {
           raw: true
         })
         
+        // Create a clean where clause without client filter since we already filtered by IDs
+        const cleanWhereClause = { ...queryOptions.where };
+        if (client && !search) {
+          delete cleanWhereClause[Op.or];
+        }
+        
         // Then get full orders with details
         queryOptions.where = {
-          ...queryOptions.where,
+          ...cleanWhereClause,
           id: { [Op.in]: orderedIds.map(o => o.id) }
         }
       }
@@ -417,6 +477,13 @@ class OrderController {
           });
         }
 
+        if (product.pack_fin_annee !== undefined && product.pack_fin_annee !== '' && !['true', 'false', true, false].includes(product.pack_fin_annee)) {
+          await transaction.rollback();
+          return res.status(400).json({ 
+            message: 'Le champ Pack fin d\'année doit être "true" ou "false"' 
+          });
+        }
+
         // Validate finitions if provided
         if (product.finitions && Array.isArray(product.finitions)) {
           for (const finition of product.finitions) {
@@ -472,7 +539,8 @@ class OrderController {
         atelier_concerne: product.atelier_concerne || null,
         commentaires: product.commentaires || null,
         bat: product.bat || null,
-        express: product.express || null
+        express: product.express || null,
+        pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true
       }));
 
       const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
@@ -733,7 +801,8 @@ class OrderController {
           atelier_concerne: product.atelier_concerne || null,
           commentaires: product.commentaires || null,
           bat: product.bat || null,
-          express: product.express || null
+          express: product.express || null,
+          pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true
         }));
 
         const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
@@ -994,6 +1063,7 @@ class OrderController {
         estimated_work_time_minutes,
         bat,
         express,
+        pack_fin_annee,
         commentaires
       } = req.body;
 
@@ -1031,6 +1101,7 @@ class OrderController {
         estimated_work_time_minutes,
         bat,
         express,
+        pack_fin_annee: pack_fin_annee === 'true' || pack_fin_annee === true,
         commentaires
       }, { transaction });
 

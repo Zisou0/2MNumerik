@@ -255,8 +255,46 @@ export const statisticsAPI = {
 
 // Export API calls
 export const exportAPI = {
-  exportDatabase: async () => {
-    const url = `${API_BASE_URL}/export/database`
+  exportDatabase: async (format = 'excel') => {
+    const url = `${API_BASE_URL}/export/database?format=${format}`
+    
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+    }
+
+    // Return the blob for file download
+    return response.blob()
+  },
+
+  exportDashboardTable: async () => {
+    const url = `${API_BASE_URL}/export/dashboard`
+    
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+    }
+
+    // Return the blob for file download
+    return response.blob()
+  },
+
+  exportTasksTable: async () => {
+    const url = `${API_BASE_URL}/export/tasks`
     
     const response = await fetch(url, {
       credentials: 'include',

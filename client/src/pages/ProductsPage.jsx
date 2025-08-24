@@ -35,12 +35,35 @@ const ProductsPage = () => {
     totalPages: 1,
     totalFinitions: 0
   })
+
+  // Helper function to format atelier type names
+  const formatAtelierType = (atelierType) => {
+    const atelierTypes = {
+      'petit_format': 'Petit Format',
+      'grand_format': 'Grand Format', 
+      'sous_traitance': 'Sous-traitance',
+      'service_crea': 'Service Créa'
+    }
+    return atelierTypes[atelierType] || 'Non assigné'
+  }
+
+  // Get atelier type badge color
+  const getAtelierTypeBadgeColor = (atelierType) => {
+    const colors = {
+      'petit_format': 'bg-blue-100 text-blue-800',
+      'grand_format': 'bg-green-100 text-green-800',
+      'sous_traitance': 'bg-orange-100 text-orange-800',
+      'service_crea': 'bg-purple-100 text-purple-800'
+    }
+    return colors[atelierType] || 'bg-gray-100 text-gray-800'
+  }
   
 
   
   const [formData, setFormData] = useState({
     name: '',
-    estimated_creation_time: ''
+    estimated_creation_time: '',
+    atelier_type: ''
   })
 
   const [finitionFormData, setFinitionFormData] = useState({
@@ -122,7 +145,8 @@ const ProductsPage = () => {
   const resetForm = () => {
     setFormData({
       name: '',
-      estimated_creation_time: ''
+      estimated_creation_time: '',
+      atelier_type: ''
     })
     setEditingProduct(null)
   }
@@ -153,7 +177,8 @@ const ProductsPage = () => {
     setEditingProduct(product)
     setFormData({
       name: product.name,
-      estimated_creation_time: product.estimated_creation_time
+      estimated_creation_time: product.estimated_creation_time,
+      atelier_type: product.atelier_type || ''
     })
     setShowModal(true)
   }
@@ -497,6 +522,9 @@ const ProductsPage = () => {
                   Temps de création estimé
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Atelier assigné
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Finitions
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -518,6 +546,17 @@ const ProductsPage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {product.estimated_creation_time} heures
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {product.atelier_type ? (
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getAtelierTypeBadgeColor(product.atelier_type)}`}>
+                        {formatAtelierType(product.atelier_type)}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
+                        Non assigné
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {product.finitions && product.finitions.length > 0 ? (
@@ -608,6 +647,17 @@ const ProductsPage = () => {
                   <div className="space-y-1 text-sm text-gray-600">
                     <p><span className="font-medium">ID:</span> {product.id}</p>
                     <p><span className="font-medium">Temps estimé:</span> {product.estimated_creation_time} heures</p>
+                    <p><span className="font-medium">Atelier:</span> 
+                      {product.atelier_type ? (
+                        <span className={`ml-1 px-2 py-1 text-xs font-medium rounded-full ${getAtelierTypeBadgeColor(product.atelier_type)}`}>
+                          {formatAtelierType(product.atelier_type)}
+                        </span>
+                      ) : (
+                        <span className="ml-1 px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
+                          Non assigné
+                        </span>
+                      )}
+                    </p>
                     <p><span className="font-medium">Créé le:</span> {new Date(product.createdAt).toLocaleDateString('fr-FR')}</p>
                     <div>
                       <span className="font-medium">Finitions:</span>
@@ -846,6 +896,24 @@ const ProductsPage = () => {
                   min="0"
                   step="0.1"
                 />
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Atelier assigné
+                  </label>
+                  <select
+                    id="atelier_type"
+                    value={formData.atelier_type}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Sélectionner un atelier</option>
+                    <option value="petit_format">Petit Format</option>
+                    <option value="grand_format">Grand Format</option>
+                    <option value="sous_traitance">Sous-traitance</option>
+                    <option value="service_crea">Service Créa</option>
+                  </select>
+                </div>
 
                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <Button type="submit" className="flex-1 order-2 sm:order-1">
