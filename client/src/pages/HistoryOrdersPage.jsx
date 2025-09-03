@@ -4,12 +4,14 @@ import Button from '../components/ButtonComponent'
 import AlertDialog from '../components/AlertDialog'
 import { useAuth } from '../contexts/AuthContext'
 import { useWebSocket } from '../contexts/WebSocketContext'
+import OrderViewModal from '../components/OrderViewModal'
 import WebSocketStatus from '../components/WebSocketStatus'
 
 const HistoryOrdersPage = () => {
   const { user } = useAuth()
   const { subscribe, connected } = useWebSocket()
-  const [orders, setOrders] = useState([])
+  // Changed from orders to orderProductRows to match dashboard structure
+  const [orderProductRows, setOrderProductRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
@@ -22,7 +24,14 @@ const HistoryOrdersPage = () => {
     client: '',
     atelier: '',
     infographe: '',
-    etape: ''
+    etape: '',
+    search: '',
+    agent_impression: '',
+    machine_impression: '',
+    bat: '',
+    express: '',
+    pack_fin_annee: '',
+    type_sous_traitance: ''
   })
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -31,14 +40,50 @@ const HistoryOrdersPage = () => {
   })
   const [stats, setStats] = useState({})
 
+  // Inline editing state
+  const [inlineEditing, setInlineEditing] = useState({})
+  const [tempValues, setTempValues] = useState({})
+
   // Status options for history (only delivered and cancelled orders)
   const historyStatusOptions = [
     { value: 'livre', label: 'Livré', color: 'bg-green-200 text-green-900 border border-green-300' },
     { value: 'annule', label: 'Annulé', color: 'bg-red-200 text-red-900 border border-red-300' }
   ]
 
-  const atelierOptions = ['petit format', 'grand format', 'sous-traitance']
+  // All status options for admin editing
+  const allStatusOptions = [
+    { value: 'problem_technique', label: 'Problème technique' },
+    { value: 'en_cours', label: 'En cours' },
+    { value: 'attente_validation', label: 'Attente de validation' },
+    { value: 'modification', label: 'Modification' },
+    { value: 'termine', label: 'Terminé' },
+    { value: 'livre', label: 'Livré' },
+    { value: 'annule', label: 'Annulé' }
+  ]
+
+  const atelierOptions = ['petit format', 'grand format', 'sous-traitance', 'service crea']
   const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition']
+  
+  const batOptions = [
+    { value: 'avec', label: 'Avec' },
+    { value: 'sans', label: 'Sans' }
+  ]
+  const expressOptions = [
+    { value: 'oui', label: 'Oui' },
+    { value: 'non', label: 'Non' }
+  ]
+
+  const packFinAnneeOptions = [
+    { value: 'true', label: 'Oui' },
+    { value: 'false', label: 'Non' }
+  ]
+
+  const sousTraitanceOptions = [
+    { value: 'Offset', label: 'Offset' },
+    { value: 'Sérigraphie', label: 'Sérigraphie' },
+    { value: 'Objet publicitaire', label: 'Objet publicitaire' },
+    { value: 'Autre', label: 'Autre' }
+  ]
 
   // Helper function to check if user can delete orders
   const canDeleteOrders = () => {
@@ -46,58 +91,305 @@ const HistoryOrdersPage = () => {
     return user && user.role === 'admin'
   }
 
+  // Helper function to check if user can edit fields
+  const isFieldEditable = (field) => {
+    // Only admin users can edit status in history
+    return user && user.role === 'admin' && field === 'statut'
+  }
+
+  // Inline editing functions
+  const handleInlineEdit = (orderProductId, field, currentValue) => {
+    if (!isFieldEditable(field)) {
+      return // Not allowed to edit this field
+    }
+    
+    const editKey = `${orderProductId}-${field}`
+    setInlineEditing({ [editKey]: true })
+    setTempValues({ [editKey]: currentValue })
+  }
+
+  const cancelInlineEdit = (orderProductId, field) => {
+    const editKey = `${orderProductId}-${field}`
+    setInlineEditing({ ...inlineEditing, [editKey]: false })
+    setTempValues({ ...tempValues, [editKey]: null })
+  }
+
+  const handleTempValueChange = (orderProductId, field, value) => {
+    setTempValues({ ...tempValues, [`${orderProductId}-${field}`]: value })
+  }
+
+  const saveInlineEdit = async (orderProductId, field, newValue) => {
+    try {
+      // Find the row to get orderId and product_id
+      const row = orderProductRows.find(r => r.orderProductId === orderProductId)
+      if (!row) {
+        throw new Error('Order product not found')
+      }
+      
+      const data = { [field]: newValue }
+      await orderAPI.updateOrderProduct(row.orderId, row.product_id, data)
+      
+      // Update the local state
+      setOrderProductRows(prev => prev.map(row => 
+        row.orderProductId === orderProductId 
+          ? { ...row, [field]: newValue }
+          : row
+      ))
+      
+      // Clear editing state
+      const editKey = `${orderProductId}-${field}`
+      setInlineEditing({ ...inlineEditing, [editKey]: false })
+      setTempValues({ ...tempValues, [editKey]: null })
+      
+      // Refresh stats if status changed
+      if (field === 'statut') {
+        fetchHistoryStats()
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour')
+      console.error(err)
+      // Cancel editing on error
+      cancelInlineEdit(orderProductId, field)
+    }
+  }
+
+  // Render inline status editor
+  const renderInlineStatus = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-statut`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => handleTempValueChange(orderProductRow.orderProductId, 'statut', e.target.value)}
+            onBlur={() => {
+              if (tempValue && tempValue !== orderProductRow.statut) {
+                saveInlineEdit(orderProductRow.orderProductId, 'statut', tempValue)
+              } else {
+                cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (tempValue && tempValue !== orderProductRow.statut) {
+                  saveInlineEdit(orderProductRow.orderProductId, 'statut', tempValue)
+                } else {
+                  cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+                }
+              } else if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          >
+            <option value="">-</option>
+            {allStatusOptions.map(status => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('statut')
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'statut', orderProductRow.statut)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span>{getStatusBadge(orderProductRow.statut)}</span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Role-based permissions - simplified for history (read-only)
+  const getVisibleColumns = () => {
+    if (user?.role === 'commercial') {
+      return {
+        numero_affaire: true,
+        numero_dm: true,
+        client_info: true,
+        commercial_en_charge: true,
+        product_name: true,
+        quantity: true,
+        numero_pms: false,
+        date_limite_livraison_attendue: true,
+        statut: true,
+        etape: true,
+        atelier_concerne: false,
+        infograph_en_charge: false,
+        date_limite_livraison_estimee: true,
+        estimated_work_time_minutes: false,
+        bat: false,
+        express: false,
+        pack_fin_annee: false,
+        type_sous_traitance: false,
+        commentaires: false,
+        agent_impression: false,
+        machine_impression: false
+      }
+    } else if (user?.role === 'infograph') {
+      return {
+        numero_affaire: false,
+        numero_dm: false,
+        client_info: true,
+        commercial_en_charge: false,
+        product_name: true,
+        quantity: true,
+        numero_pms: true,
+        date_limite_livraison_attendue: false,
+        statut: true,
+        etape: true,
+        atelier_concerne: true,
+        infograph_en_charge: true,
+        agent_impression: true,
+        machine_impression: false,
+        date_limite_livraison_estimee: true,
+        estimated_work_time_minutes: false,
+        bat: true,
+        express: true,
+        pack_fin_annee: false,
+        type_sous_traitance: false,
+        commentaires: false
+      }
+    } else if (user?.role === 'atelier') {
+      return {
+        numero_affaire: false,
+        numero_dm: false,
+        client_info: true,
+        commercial_en_charge: false,
+        product_name: true,
+        quantity: true,
+        numero_pms: true,
+        date_limite_livraison_attendue: false,
+        statut: true,
+        etape: true,
+        atelier_concerne: true,
+        infograph_en_charge: true,
+        agent_impression: true,
+        machine_impression: true,
+        date_limite_livraison_estimee: true,
+        estimated_work_time_minutes: false,
+        bat: true,
+        express: true,
+        pack_fin_annee: false,
+        type_sous_traitance: true,
+        commentaires: false
+      }
+    } else {
+      // Admin and other roles see everything
+      return {
+        numero_affaire: true,
+        numero_dm: true,
+        client_info: true,
+        commercial_en_charge: true,
+        product_name: true,
+        quantity: true,
+        numero_pms: true,
+        date_limite_livraison_attendue: true,
+        statut: true,
+        etape: true,
+        atelier_concerne: true,
+        infograph_en_charge: true,
+        agent_impression: true,
+        machine_impression: true,
+        date_limite_livraison_estimee: true,
+        estimated_work_time_minutes: true,
+        bat: true,
+        express: true,
+        pack_fin_annee: true,
+        type_sous_traitance: true,
+        commentaires: true
+      }
+    }
+  }
+
+  const visibleColumns = getVisibleColumns()
+
+  // Fetch orders and flatten to order-product rows (history version)
   const fetchHistoryOrders = async (page = 1) => {
     try {
       setLoading(true)
       
-      // Force filter to only show history orders (finished and cancelled)
+      // Use the new history API endpoint
       const historyFilters = {
         ...filters,
         page,
-        limit: 10,
-        timeFilter: 'all'
+        limit: 10
       }
 
-      // If no specific status is selected, include only livre and annule statuses
-      if (!historyFilters.statut) {
-        // Fetch only delivered and cancelled orders
-        const [deliveredResponse, cancelledResponse] = await Promise.all([
-          orderAPI.getOrders({ ...historyFilters, statut: 'livre' }),
-          orderAPI.getOrders({ ...historyFilters, statut: 'annule' })
-        ])
+      // Remove empty filters
+      Object.keys(historyFilters).forEach(key => {
+        if (historyFilters[key] === '') {
+          delete historyFilters[key]
+        }
+      })
 
-        // Combine results
-        const allHistoryOrders = [
-          ...(deliveredResponse.orders || []),
-          ...(cancelledResponse.orders || [])
-        ]
-
-        // Sort by modified date (most recent first)
-        allHistoryOrders.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-
-        // Handle pagination manually for combined results
-        const startIndex = (page - 1) * 10
-        const endIndex = startIndex + 10
-        const paginatedOrders = allHistoryOrders.slice(startIndex, endIndex)
-
-        setOrders(paginatedOrders)
-        setPagination({
-          currentPage: page,
-          totalPages: Math.ceil(allHistoryOrders.length / 10),
-          totalOrders: allHistoryOrders.length,
-          hasNextPage: endIndex < allHistoryOrders.length,
-          hasPrevPage: page > 1
-        })
-      } else {
-        // Fetch specific status
-        const response = await orderAPI.getOrders(historyFilters)
-        setOrders(response.orders || [])
-        setPagination(response.pagination || {
-          currentPage: 1,
-          totalPages: 1,
-          totalOrders: 0
-        })
-      }
+      const response = await orderAPI.getHistoryOrders(historyFilters)
+      
+      // Flatten the response orders to order-product rows
+      const flatRows = []
+      response.orders.forEach(order => {
+        if (order.orderProducts && order.orderProducts.length > 0) {
+          order.orderProducts.forEach(orderProduct => {
+            const productStatus = orderProduct.statut || order.statut
+            
+            flatRows.push({
+              orderProductId: orderProduct.id,
+              orderId: order.id,
+              numero_affaire: order.numero_affaire,
+              numero_dm: order.numero_dm,
+              client_info: order.clientInfo?.nom || order.client,
+              commercial_en_charge: order.commercial_en_charge,
+              date_limite_livraison_attendue: order.date_limite_livraison_attendue,
+              product_id: orderProduct.product_id,
+              product_name: orderProduct.product?.name || orderProduct.productInfo?.name || 'Produit',
+              quantity: orderProduct.quantity,
+              numero_pms: orderProduct.numero_pms,
+              statut: productStatus,
+              etape: orderProduct.etape,
+              atelier_concerne: orderProduct.atelier_concerne,
+              infograph_en_charge: orderProduct.infograph_en_charge,
+              agent_impression: orderProduct.agent_impression,
+              machine_impression: orderProduct.machine_impression,
+              date_limite_livraison_estimee: orderProduct.date_limite_livraison_estimee,
+              estimated_work_time_minutes: orderProduct.estimated_work_time_minutes,
+              bat: orderProduct.bat,
+              express: orderProduct.express,
+              pack_fin_annee: orderProduct.pack_fin_annee,
+              type_sous_traitance: orderProduct.type_sous_traitance,
+              commentaires: orderProduct.commentaires,
+              finitions: orderProduct.finitions || [],
+              orderProductFinitions: orderProduct.orderProductFinitions || [],
+              clientInfo: order.clientInfo || { nom: order.client },
+              createdAt: order.createdAt,
+              updatedAt: order.updatedAt
+            })
+          })
+        }
+      })
+      
+      setOrderProductRows(flatRows)
+      setPagination(response.pagination || {
+        currentPage: 1,
+        totalPages: 1,
+        totalOrders: 0
+      })
     } catch (err) {
       setError('Erreur lors du chargement de l\'historique des commandes')
       console.error(err)
@@ -108,14 +400,11 @@ const HistoryOrdersPage = () => {
 
   const fetchHistoryStats = async () => {
     try {
-      const response = await orderAPI.getOrderStats()
-      const allStats = response.stats || {}
-      
-      // Extract only history-related stats (livre and annule)
-      setStats({
-        livre: allStats.livre || 0,
-        annule: allStats.annule || 0,
-        total: (allStats.livre || 0) + (allStats.annule || 0)
+      const response = await orderAPI.getHistoryOrderStats()
+      setStats(response.stats || {
+        livre: 0,
+        annule: 0,
+        total: 0
       })
     } catch (err) {
       console.error('Erreur lors du chargement des statistiques:', err)
@@ -136,23 +425,12 @@ const HistoryOrdersPage = () => {
       
       // Only add to history if order is now cancelled or delivered
       if (updatedOrder.statut === 'annule' || updatedOrder.statut === 'livre') {
-        setOrders(prevOrders => {
-          const orderIndex = prevOrders.findIndex(order => order.id === updatedOrder.id)
-          if (orderIndex >= 0) {
-            const newOrders = [...prevOrders]
-            newOrders[orderIndex] = updatedOrder
-            return newOrders
-          } else {
-            // Order wasn't in history before but now should be
-            return [updatedOrder, ...prevOrders]
-          }
-        })
-        
-        // Update stats
+        // Refresh the data since the structure is more complex now
+        fetchHistoryOrders(pagination.currentPage)
         fetchHistoryStats()
       } else {
-        // Order is no longer in history state, remove it
-        setOrders(prevOrders => prevOrders.filter(order => order.id !== updatedOrder.id))
+        // Order is no longer in history state, refresh data
+        fetchHistoryOrders(pagination.currentPage)
         fetchHistoryStats()
       }
     })
@@ -160,7 +438,7 @@ const HistoryOrdersPage = () => {
     const unsubscribeOrderDeleted = subscribe('orderDeleted', (deletedOrderData) => {
       console.log('Real-time: Order deleted from history', deletedOrderData)
       
-      setOrders(prevOrders => prevOrders.filter(order => order.id !== deletedOrderData.id))
+      setOrderProductRows(prevRows => prevRows.filter(row => row.orderId !== deletedOrderData.id))
       
       // Update stats
       fetchHistoryStats()
@@ -199,12 +477,51 @@ const HistoryOrdersPage = () => {
     setOrderToDelete(null)
   }
 
-  const handleRowClick = (order, event) => {
-    // Don't open modal if clicking on action buttons
-    if (event.target.closest('.action-button')) {
+  const handleRowClick = (orderProductRow, event) => {
+    // Don't open modal if clicking on action buttons or inline edit fields
+    if (event.target.closest('.action-button') || event.target.closest('.inline-edit')) {
       return
     }
-    setSelectedOrder(order)
+    
+    // Create a mock order object for the modal from the orderProductRow
+    const mockOrder = {
+      id: orderProductRow.orderId,
+      numero_affaire: orderProductRow.numero_affaire,
+      numero_dm: orderProductRow.numero_dm,
+      numero_pms: orderProductRow.numero_pms,
+      client: orderProductRow.client_info,
+      clientInfo: orderProductRow.clientInfo,
+      commercial_en_charge: orderProductRow.commercial_en_charge,
+      date_limite_livraison_attendue: orderProductRow.date_limite_livraison_attendue,
+      statut: orderProductRow.statut,
+      etape: orderProductRow.etape,
+      createdAt: orderProductRow.createdAt,
+      updatedAt: orderProductRow.updatedAt,
+      orderProducts: [{
+        id: orderProductRow.orderProductId,
+        product_id: orderProductRow.product_id,
+        productInfo: { name: orderProductRow.product_name },
+        product: { name: orderProductRow.product_name },
+        quantity: orderProductRow.quantity,
+        numero_pms: orderProductRow.numero_pms,
+        statut: orderProductRow.statut,
+        etape: orderProductRow.etape,
+        atelier_concerne: orderProductRow.atelier_concerne,
+        infograph_en_charge: orderProductRow.infograph_en_charge,
+        agent_impression: orderProductRow.agent_impression,
+        machine_impression: orderProductRow.machine_impression,
+        date_limite_livraison_estimee: orderProductRow.date_limite_livraison_estimee,
+        estimated_work_time_minutes: orderProductRow.estimated_work_time_minutes,
+        bat: orderProductRow.bat,
+        express: orderProductRow.express,
+        pack_fin_annee: orderProductRow.pack_fin_annee,
+        commentaires: orderProductRow.commentaires,
+        finitions: orderProductRow.finitions || [],
+        orderProductFinitions: orderProductRow.orderProductFinitions || []
+      }]
+    }
+    
+    setSelectedOrder(mockOrder)
     setShowViewModal(true)
   }
 
@@ -221,7 +538,14 @@ const HistoryOrdersPage = () => {
 
   const getStatusBadge = (status) => {
     const statusConfig = historyStatusOptions.find(s => s.value === status)
-    if (!statusConfig) return status
+    if (!statusConfig) {
+      // Fallback for any other status
+      return (
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-900 border border-gray-300">
+          {status || 'Inconnu'}
+        </span>
+      )
+    }
     
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
@@ -230,8 +554,8 @@ const HistoryOrdersPage = () => {
     )
   }
 
-  const getRowBackgroundClass = (order) => {
-    const { statut } = order
+  const getRowBackgroundClass = (orderProductRow) => {
+    const { statut } = orderProductRow
     
     if (statut === 'livre') {
       return 'bg-green-50 hover:bg-green-100 border-l-4 border-green-400'
@@ -242,7 +566,80 @@ const HistoryOrdersPage = () => {
     return 'bg-gray-50 hover:bg-gray-100'
   }
 
-  if (loading && orders.length === 0) {
+  const getBatBadge = (batValue) => {
+    const getBatBackgroundClass = (value) => {
+      if (value === 'avec') {
+        return 'bg-green-100 text-green-800 border border-green-200'
+      } else if (value === 'sans') {
+        return 'bg-red-100 text-red-800 border border-red-200'
+      } else {
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
+      }
+    }
+
+    const getBatLabel = (value) => {
+      const option = batOptions.find(opt => opt.value === value)
+      return option ? option.label : (value || '-')
+    }
+
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getBatBackgroundClass(batValue)}`}>
+        {getBatLabel(batValue)}
+      </span>
+    )
+  }
+
+  const getExpressBadge = (expressValue) => {
+    const isExpress = expressValue === 'oui'
+    
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+        isExpress 
+          ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+          : 'bg-gray-100 text-gray-800 border border-gray-200'
+      }`}>
+        {isExpress ? 'Oui' : 'Non'}
+      </span>
+    )
+  }
+
+  const getAtelierBadge = (atelierValue) => {
+    const getAtelierBackgroundClass = (value) => {
+      if (value === 'grand format') {
+        return 'bg-green-100 text-green-800 border border-green-200'
+      } else if (value === 'petit format') {
+        return 'bg-blue-100 text-blue-800 border border-blue-200'
+      } else if (value === 'sous-traitance') {
+        return 'bg-orange-100 text-orange-800 border border-orange-200'
+      } else if (value === 'service crea') {
+        return 'bg-purple-100 text-purple-800 border border-purple-200'
+      } else {
+        return 'bg-gray-100 text-gray-800 border border-gray-200'
+      }
+    }
+
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getAtelierBackgroundClass(atelierValue)}`}>
+        {atelierValue || '-'}
+      </span>
+    )
+  }
+
+  const getPackFinAnneeBadge = (packValue) => {
+    const isPackFinAnnee = packValue === true || packValue === 'true'
+    
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+        isPackFinAnnee 
+          ? 'bg-purple-100 text-purple-800 border border-purple-200'
+          : 'bg-gray-100 text-gray-800 border border-gray-200'
+      }`}>
+        {isPackFinAnnee ? 'Oui' : 'Non'}
+      </span>
+    )
+  }
+
+  if (loading && orderProductRows.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-gray-500">Chargement de l'historique...</div>
@@ -254,41 +651,23 @@ const HistoryOrdersPage = () => {
     <div className="p-6">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <div>
+          <div className="flex items-center gap-4">
             <h1 className="text-3xl font-bold text-gray-900">Historique des commandes</h1>
-            <p className="text-gray-600 mt-1">Commandes livrées et annulées</p>
-          </div>
-        </div>
-
-        {/* Information Banner */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-blue-800">Politique de conservation</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                Les commandes livrées et annulées sont conservées de manière permanente pour l'audit, la comptabilité et la traçabilité. 
-                La suppression est désactivée pour préserver l'intégrité des données.
-              </p>
-            </div>
+            <WebSocketStatus />
           </div>
         </div>
         
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow">
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-gray-500">
             <div className="text-2xl font-bold text-gray-600">{stats.total || 0}</div>
             <div className="text-sm text-gray-600">Total historique</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow">
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
             <div className="text-2xl font-bold text-green-600">{stats.livre || 0}</div>
             <div className="text-sm text-gray-600">Livrées</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow">
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
             <div className="text-2xl font-bold text-red-600">{stats.annule || 0}</div>
             <div className="text-sm text-gray-600">Annulées</div>
           </div>
@@ -296,11 +675,39 @@ const HistoryOrdersPage = () => {
 
         {/* Filters */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
+          {/* Admin editing notice */}
+          {user?.role === 'admin' && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-medium text-blue-800">
+                  Mode administrateur : Vous pouvez modifier le statut des commandes en cliquant dessus.
+                </span>
+              </div>
+            </div>
+          )}
+          
           <div className="flex flex-wrap gap-3 items-center">
+            {/* PMS Search Field */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Rechercher par N° PMS"
+                value={filters.search || ''}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                className="px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64"
+              />
+              <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+
             <select
               value={filters.statut}
               onChange={(e) => setFilters({...filters, statut: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="">Tous les statuts</option>
               {historyStatusOptions.map(status => (
@@ -315,7 +722,7 @@ const HistoryOrdersPage = () => {
               placeholder="Commercial"
               value={filters.commercial}
               onChange={(e) => setFilters({...filters, commercial: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             
             <input
@@ -323,7 +730,7 @@ const HistoryOrdersPage = () => {
               placeholder="Client"
               value={filters.client}
               onChange={(e) => setFilters({...filters, client: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
 
             <input
@@ -331,13 +738,13 @@ const HistoryOrdersPage = () => {
               placeholder="Infographe"
               value={filters.infographe}
               onChange={(e) => setFilters({...filters, infographe: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             
             <select
               value={filters.atelier}
               onChange={(e) => setFilters({...filters, atelier: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="">Tous les ateliers</option>
               {atelierOptions.map(atelier => (
@@ -350,7 +757,7 @@ const HistoryOrdersPage = () => {
             <select
               value={filters.etape}
               onChange={(e) => setFilters({...filters, etape: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="">Toutes les étapes</option>
               {etapeOptions.map(etape => (
@@ -360,8 +767,75 @@ const HistoryOrdersPage = () => {
               ))}
             </select>
 
+            {/* Agent Impression Filter */}
+            <input
+              type="text"
+              placeholder="Agent impression"
+              value={filters.agent_impression}
+              onChange={(e) => setFilters({ ...filters, agent_impression: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+
+            {/* Machine Impression Filter - Only visible for admin and atelier users */}
+            {(user?.role === 'admin' || user?.role === 'atelier') && (
+              <input
+                type="text"
+                placeholder="Machine impression"
+                value={filters.machine_impression}
+                onChange={(e) => setFilters({ ...filters, machine_impression: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            )}
+
+            {/* Express Filter */}
+            <select
+              value={filters.express || ''}
+              onChange={(e) => setFilters({ ...filters, express: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">Toutes les urgences</option>
+              <option value="oui">Express uniquement</option>
+              <option value="non">Non express</option>
+            </select>
+
+            {/* BAT Filter */}
+            <select
+              value={filters.bat || ''}
+              onChange={(e) => setFilters({ ...filters, bat: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">Tous les BAT</option>
+              <option value="avec">Avec BAT</option>
+              <option value="sans">Sans BAT</option>
+            </select>
+
+            {/* Pack Fin d'Année Filter */}
+            <select
+              value={filters.pack_fin_annee || ''}
+              onChange={(e) => setFilters({ ...filters, pack_fin_annee: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">Pack fin d'année</option>
+              <option value="true">Oui</option>
+              <option value="false">Non</option>
+            </select>
+
+            {/* Type Sous-traitance Filter */}
+            <select
+              value={filters.type_sous_traitance || ''}
+              onChange={(e) => setFilters({ ...filters, type_sous_traitance: e.target.value })}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="">Type sous-traitance</option>
+              {sousTraitanceOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
             {/* Clear Filters Button */}
-            {(filters.statut || filters.commercial || filters.client || filters.infographe || filters.atelier || filters.etape) && (
+            {Object.values(filters).some(v => v !== '') && (
               <button
                 onClick={() => setFilters({
                   statut: '',
@@ -369,7 +843,14 @@ const HistoryOrdersPage = () => {
                   client: '',
                   atelier: '',
                   infographe: '',
-                  etape: ''
+                  etape: '',
+                  search: '',
+                  agent_impression: '',
+                  machine_impression: '',
+                  bat: '',
+                  express: '',
+                  pack_fin_annee: '',
+                  type_sous_traitance: ''
                 })}
                 className="text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors duration-200"
               >
@@ -385,190 +866,250 @@ const HistoryOrdersPage = () => {
           </div>
         )}
 
-        {/* Orders Cards - Mobile/Tablet View */}
-        <div className="lg:hidden space-y-4 mb-6">
-          {orders.map((order) => (
-            <div 
-              key={order.id} 
-              className={`shadow-md rounded-lg p-4 border transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(order)}`}
-              onClick={(e) => handleRowClick(order, e)}
-            >
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">{order.numero_pms}</h3>
-                    {getStatusBadge(order.statut)}
-                  </div>
-                  
-                  <div className="space-y-1 text-sm text-gray-600 mb-3">
-                    <p><span className="font-medium">Client:</span> {order.client}</p>
-                    <p><span className="font-medium">Commercial:</span> {order.commercial_en_charge}</p>
-                    {order.infographe_en_charge && (
-                      <p><span className="font-medium">Infographe:</span> {order.infographe_en_charge}</p>
-                    )}
-                    <div>
-                      <span className="font-medium">Produits:</span>
-                      {order.products && order.products.length > 0 ? (
-                        <ul className="ml-4 mt-1">
-                          {order.products.map((product, index) => (
-                            <li key={index} className="text-sm">
-                              {product.name} (Qté: {product.orderProduct?.quantity || 'N/A'})
-                              {product.orderProduct?.unit_price && (
-                                <span className="text-gray-600"> - {product.orderProduct.unit_price}€/unité</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <span className="ml-2 text-gray-500">Aucun produit associé</span>
-                      )}
-                    </div>
-                    {order.etape && (
-                      <p><span className="font-medium">Étape finale:</span> {order.etape}</p>
-                    )}
-                    {order.atelier_concerne && (
-                      <p><span className="font-medium">Atelier:</span> {order.atelier_concerne}</p>
-                    )}
-                    <p><span className="font-medium">Date de création:</span> {formatDate(order.createdAt)}</p>
-                    <p><span className="font-medium">Dernière mise à jour:</span> {formatDate(order.updatedAt)}</p>
-                    {order.option_finition && (
-                      <p><span className="font-medium">Finitions:</span> {order.option_finition}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              {canDeleteOrders() && (
-                <div className="flex justify-end pt-3 border-t">
-                  <div className="action-button">
-                    <button
-                      onClick={() => handleDeleteOrder(order.id)}
-                      className="flex items-center gap-2 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-          
-          {orders.length === 0 && (
-            <div className="text-center py-8 text-gray-500 bg-white rounded-lg shadow">
-              Aucune commande trouvée dans l'historique
-            </div>
-          )}
-        </div>
-
-        {/* Orders Table - Desktop View */}
-        <div className="hidden lg:block bg-white rounded-lg shadow overflow-hidden">
+        {/* Main Table */}
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Commande
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Commercial
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Infographe
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Étape finale
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Atelier
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date création
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Finitions
-                  </th>
+                  {/* Role-based column visibility */}
+                  {visibleColumns.atelier_concerne && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Atelier
+                    </th>
+                  )}
+                  {visibleColumns.client_info && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Client
+                    </th>
+                  )}
+                  {visibleColumns.product_name && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Produit
+                    </th>
+                  )}
+                  {visibleColumns.quantity && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quantité
+                    </th>
+                  )}
+                  {visibleColumns.bat && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      BAT
+                    </th>
+                  )}
+                  {visibleColumns.express && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Express
+                    </th>
+                  )}
+                  {visibleColumns.pack_fin_annee && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Pack fin d'année
+                    </th>
+                  )}
+                  {visibleColumns.infograph_en_charge && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Graphiste
+                    </th>
+                  )}
+                  {visibleColumns.numero_pms && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      N° PMS
+                    </th>
+                  )}
+                  {visibleColumns.etape && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Étape
+                    </th>
+                  )}
+                  {visibleColumns.agent_impression && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Agent impression
+                    </th>
+                  )}
+                  {visibleColumns.machine_impression && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Machine impression
+                    </th>
+                  )}
+                  {visibleColumns.statut && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Statut
+                    </th>
+                  )}
+                  {visibleColumns.date_limite_livraison_estimee && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Délais
+                    </th>
+                  )}
+                  {visibleColumns.numero_affaire && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      N° Affaire
+                    </th>
+                  )}
+                  {visibleColumns.numero_dm && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      N° DM
+                    </th>
+                  )}
+                  {visibleColumns.commercial_en_charge && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Commercial
+                    </th>
+                  )}
+                  {visibleColumns.date_limite_livraison_attendue && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Délai Client
+                    </th>
+                  )}
+                  {visibleColumns.estimated_work_time_minutes && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Temps (min)
+                    </th>
+                  )}
+                  {visibleColumns.commentaires && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Commentaires
+                    </th>
+                  )}
+                  {visibleColumns.type_sous_traitance && (
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type sous-traitance
+                    </th>
+                  )}
                   {canDeleteOrders() && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {orders.map((order) => (
+                {orderProductRows.map((row) => (
                   <tr 
-                    key={order.id} 
-                    className={`transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(order)}`}
-                    onClick={(e) => handleRowClick(order, e)}
+                    key={`${row.orderId}-${row.orderProductId}`}
+                    className={`transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(row)}`}
+                    onClick={(e) => handleRowClick(row, e)}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {order.numero_pms}
-                        </div>
-                        <div className="text-sm text-gray-500 max-w-xs">
-                          {order.products && order.products.length > 0 ? (
-                            <>
-                              {order.products.slice(0, 2).map((product, index) => (
-                                <div key={index} className="truncate">
-                                  {product.name} (Qté: {product.orderProduct?.quantity || 'N/A'})
-                                </div>
-                              ))}
-                              {order.products.length > 2 && (
-                                <div className="text-xs text-gray-400">
-                                  +{order.products.length - 2} produit(s) de plus
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-gray-400">Aucun produit</span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.client}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.commercial_en_charge}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.infographe_en_charge || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(order.statut)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.etape || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.atelier_concerne || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(order.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-xs truncate">
-                      {order.option_finition || '-'}
-                    </td>
+                    {/* Role-based column visibility */}
+                    {visibleColumns.atelier_concerne && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {getAtelierBadge(row.atelier_concerne)}
+                      </td>
+                    )}
+                    {visibleColumns.client_info && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.client_info}
+                      </td>
+                    )}
+                    {visibleColumns.product_name && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.product_name}
+                      </td>
+                    )}
+                    {visibleColumns.quantity && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.quantity}
+                      </td>
+                    )}
+                    {visibleColumns.bat && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {getBatBadge(row.bat)}
+                      </td>
+                    )}
+                    {visibleColumns.express && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {getExpressBadge(row.express)}
+                      </td>
+                    )}
+                    {visibleColumns.pack_fin_annee && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {getPackFinAnneeBadge(row.pack_fin_annee)}
+                      </td>
+                    )}
+                    {visibleColumns.infograph_en_charge && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.infograph_en_charge || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.numero_pms && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.numero_pms}
+                      </td>
+                    )}
+                    {visibleColumns.etape && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.etape || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.agent_impression && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.agent_impression || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.machine_impression && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.machine_impression || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.statut && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {renderInlineStatus(row)}
+                      </td>
+                    )}
+                    {visibleColumns.date_limite_livraison_estimee && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {formatDate(row.date_limite_livraison_estimee)}
+                      </td>
+                    )}
+                    {visibleColumns.numero_affaire && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.numero_affaire}
+                      </td>
+                    )}
+                    {visibleColumns.numero_dm && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.numero_dm}
+                      </td>
+                    )}
+                    {visibleColumns.commercial_en_charge && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.commercial_en_charge}
+                      </td>
+                    )}
+                    {visibleColumns.date_limite_livraison_attendue && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {formatDate(row.date_limite_livraison_attendue)}
+                      </td>
+                    )}
+                    {visibleColumns.estimated_work_time_minutes && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.estimated_work_time_minutes ? `${row.estimated_work_time_minutes} min` : '-'}
+                      </td>
+                    )}
+                    {visibleColumns.commentaires && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-500 max-w-xs truncate">
+                        {row.commentaires && row.commentaires.length > 50 
+                          ? row.commentaires.substring(0, 47) + '...' 
+                          : row.commentaires || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.type_sous_traitance && (
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        {row.type_sous_traitance || '-'}
+                      </td>
+                    )}
                     {canDeleteOrders() && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="action-button">
+                      <td className="px-2 py-1 whitespace-nowrap text-sm text-gray-900">
+                        <div className="flex items-center gap-2 action-button">
                           <button
-                            onClick={() => handleDeleteOrder(order.id)}
-                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteOrder(row.orderId)
+                            }}
+                            className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-2 py-1 rounded text-xs"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
                             Supprimer
                           </button>
                         </div>
@@ -579,6 +1120,12 @@ const HistoryOrdersPage = () => {
               </tbody>
             </table>
           </div>
+
+          {orderProductRows.length === 0 && (
+            <div className="text-center py-8 text-gray-500 bg-white">
+              Aucune commande trouvée dans l'historique
+            </div>
+          )}
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
@@ -604,7 +1151,7 @@ const HistoryOrdersPage = () => {
                   <p className="text-sm text-gray-700">
                     Page <span className="font-medium">{pagination.currentPage}</span> sur{' '}
                     <span className="font-medium">{pagination.totalPages}</span> - Total:{' '}
-                    <span className="font-medium">{pagination.totalOrders}</span> commandes
+                    <span className="font-medium">{pagination.totalOrders}</span> éléments
                   </p>
                 </div>
                 <div>
@@ -650,219 +1197,11 @@ const HistoryOrdersPage = () => {
         onClose={cancelDeleteOrder}
         onConfirm={confirmDeleteOrder}
         title="Confirmer la suppression"
-        message={`Êtes-vous sûr de vouloir supprimer définitivement la commande ${orders.find(o => o.id === orderToDelete)?.numero_pms || ''} ? Cette action est irréversible.`}
+        message={`Êtes-vous sûr de vouloir supprimer définitivement cette commande ? Cette action est irréversible.`}
         confirmText="Supprimer"
         cancelText="Annuler"
         type="danger"
       />
-    </div>
-  )
-}
-
-// Simple Order View Modal Component for History
-const OrderViewModal = ({ order, onClose, formatDate, getStatusBadge, etapeOptions }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in">
-      <div className="relative top-8 mx-auto p-0 w-11/12 max-w-4xl min-h-[calc(100vh-4rem)] animate-in slide-in-from-top-4 duration-500">
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden transform transition-all duration-300 hover:shadow-3xl">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 px-8 py-6 text-white relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-transparent"></div>
-            
-            <div className="flex items-center justify-between relative">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm border border-white/30 shadow-lg">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold tracking-tight">
-                    Historique - Commande
-                  </h3>
-                  <p className="text-gray-100 text-sm mt-1 font-medium">
-                    {order.numero_pms}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onClose}
-                  className="p-3 hover:bg-white/20 rounded-xl transition-all duration-200 group border border-white/20 backdrop-blur-sm"
-                >
-                  <svg className="w-5 h-5 group-hover:rotate-90 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="p-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Left Column - Basic Information */}
-              <div className="space-y-6">
-                {/* Basic Info Section */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 shadow-sm">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-blue-100 rounded-lg shadow-sm border border-blue-200">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <h4 className="text-lg font-semibold text-gray-800">Informations générales</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center py-2 border-b border-blue-200/50">
-                      <span className="font-medium text-gray-700">Numéro PMS:</span>
-                      <span className="text-gray-900 font-semibold">{order.numero_pms}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-blue-200/50">
-                      <span className="font-medium text-gray-700">Client:</span>
-                      <span className="text-gray-900 font-medium">{order.client}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-blue-200/50">
-                      <span className="font-medium text-gray-700">Commercial:</span>
-                      <span className="text-gray-900">{order.commercial_en_charge}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-blue-200/50">
-                      <span className="font-medium text-gray-700">Infographe:</span>
-                      <span className="text-gray-900">{order.infographe_en_charge || '-'}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="font-medium text-gray-700">Statut final:</span>
-                      {getStatusBadge(order.statut)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Production Section */}
-                <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-6 border border-purple-200 shadow-sm">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-purple-100 rounded-lg shadow-sm border border-purple-200">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <h4 className="text-lg font-semibold text-gray-800">Production</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center py-2 border-b border-purple-200/50">
-                      <span className="font-medium text-gray-700">Étape finale:</span>
-                      <span className="text-gray-900 bg-white px-3 py-1 rounded-full border border-purple-200/50 font-medium">
-                        {order.etape || '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-purple-200/50">
-                      <span className="font-medium text-gray-700">Atelier concerné:</span>
-                      <span className="text-gray-900">{order.atelier_concerne || '-'}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="font-medium text-gray-700">Options de finition:</span>
-                      <span className="text-gray-900">{order.option_finition || '-'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column */}
-              <div className="space-y-6">
-                {/* Product Details Section */}
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 shadow-sm">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-green-100 rounded-lg shadow-sm border border-green-200">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                    </div>
-                    <h4 className="text-lg font-semibold text-gray-800">Produits</h4>
-                  </div>
-                  <div className="space-y-3">
-                    {order.products && order.products.length > 0 ? (
-                      order.products.map((product, index) => (
-                        <div key={index} className="bg-white p-4 rounded-lg border border-green-200/50 shadow-sm">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <h5 className="font-medium text-gray-900 mb-1">{product.name}</h5>
-                              <p className="text-sm text-gray-600">{product.description || 'Aucune description'}</p>
-                            </div>
-                            <div className="text-right ml-4">
-                              <div className="text-sm text-gray-600">Quantité</div>
-                              <div className="font-semibold text-gray-900">{product.orderProduct?.quantity || 'N/A'}</div>
-                              {product.orderProduct?.unit_price && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {product.orderProduct.unit_price}€/unité
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-6 text-gray-500">
-                        Aucun produit associé à cette commande
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Dates Section */}
-                <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 border border-orange-200 shadow-sm">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-orange-100 rounded-lg shadow-sm border border-orange-200">
-                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <h4 className="text-lg font-semibold text-gray-800">Dates importantes</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center py-2 border-b border-orange-200/50">
-                      <span className="font-medium text-gray-700">Date de création:</span>
-                      <span className="text-gray-900">{formatDate(order.createdAt)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-orange-200/50">
-                      <span className="font-medium text-gray-700">Dernière mise à jour:</span>
-                      <span className="text-gray-900">{formatDate(order.updatedAt)}</span>
-                    </div>
-                    {order.date_limite_livraison_estimee && (
-                      <div className="flex justify-between items-center py-2 border-b border-orange-200/50">
-                        <span className="font-medium text-gray-700">Livraison estimée:</span>
-                        <span className="text-gray-900">{formatDate(order.date_limite_livraison_estimee)}</span>
-                      </div>
-                    )}
-                    {order.date_limite_livraison_attendue && (
-                      <div className="flex justify-between items-center py-2">
-                        <span className="font-medium text-gray-700">Livraison attendue:</span>
-                        <span className="text-gray-900">{formatDate(order.date_limite_livraison_attendue)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Comments Section */}
-                {order.commentaires && (
-                  <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 border border-gray-200 shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-gray-100 rounded-lg shadow-sm border border-gray-200">
-                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                      </div>
-                      <h4 className="text-lg font-semibold text-gray-800">Commentaires</h4>
-                    </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200/50 shadow-sm">
-                      <p className="text-gray-700 whitespace-pre-wrap">{order.commentaires}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

@@ -40,10 +40,12 @@ const DashboardPageClean = () => {
     atelier: '',
     infograph: '',
     agent_impression: '',
+    machine_impression: '',
     etape: '',
     express: '',
     bat: '',
     pack_fin_annee: '',
+    type_sous_traitance: '',
     search: '',
     date_from: '',
     date_to: '',
@@ -80,6 +82,8 @@ const DashboardPageClean = () => {
   const statusOptions = [
     { value: 'problem_technique', label: 'Problème technique' },
     { value: 'en_cours', label: 'En cours' },
+    { value: 'attente_validation', label: 'Attente de validation' },
+    { value: 'modification', label: 'Modification' },
     { value: 'termine', label: 'Terminé' },
     { value: 'livre', label: 'Livré' },
     { value: 'annule', label: 'Annulé' }
@@ -101,11 +105,48 @@ const DashboardPageClean = () => {
     } else if (atelier === 'service crea') {
       return ['travail graphique', 'conception']
     } else if (atelier === 'sous-traitance') {
-      return []
+      return ['impression', 'finition']
     }
     
     // Default fallback
     return etapeOptions
+  }
+
+  // Helper function to get status options based on atelier_concerne
+  const getStatusOptionsByAtelier = (atelierConcerne) => {
+    if (!atelierConcerne) {
+      // Return standard options for no atelier specified
+      return [
+        { value: 'problem_technique', label: 'Problème technique' },
+        { value: 'en_cours', label: 'En cours' },
+        { value: 'termine', label: 'Terminé' },
+        { value: 'livre', label: 'Livré' },
+        { value: 'annule', label: 'Annulé' }
+      ]
+    }
+    
+    const atelier = atelierConcerne.toLowerCase()
+    
+    if (atelier === 'service crea') {
+      return [
+        { value: 'en_cours', label: 'En cours' },
+        { value: 'attente_validation', label: 'Attente de validation' },
+        { value: 'modification', label: 'Modification' },
+        { value: 'termine', label: 'Terminé' },
+        { value: 'livre', label: 'Livré' },
+        { value: 'annule', label: 'Annulé' },
+        { value: 'problem_technique', label: 'Problème technique' }
+      ]
+    }
+    
+    // For all other ateliers (petit format, grand format, sous-traitance), return standard options
+    return [
+      { value: 'problem_technique', label: 'Problème technique' },
+      { value: 'en_cours', label: 'En cours' },
+      { value: 'termine', label: 'Terminé' },
+      { value: 'livre', label: 'Livré' },
+      { value: 'annule', label: 'Annulé' }
+    ]
   }
   
   const batOptions = [
@@ -120,6 +161,13 @@ const DashboardPageClean = () => {
   const packFinAnneeOptions = [
     { value: 'true', label: 'Oui' },
     { value: 'false', label: 'Non' }
+  ]
+
+  const sousTraitanceOptions = [
+    { value: 'Offset', label: 'Offset' },
+    { value: 'Sérigraphie', label: 'Sérigraphie' },
+    { value: 'Objet publicitaire', label: 'Objet publicitaire' },
+    { value: 'Autre', label: 'Autre' }
   ]
 
   // Convert flattened orderProductRows back to orders format for notifications
@@ -184,11 +232,12 @@ const DashboardPageClean = () => {
         estimated_work_time_minutes: false,
         bat: false,
         express: false,
-        pack_fin_annee: true,
+        pack_fin_annee: false,
+        type_sous_traitance: false,
         commentaires: false
       }
-    } else if (user?.role === 'infograph' || user?.role === 'atelier') {
-      // For infograph and atelier users: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais
+    } else if (user?.role === 'infograph') {
+      // For infograph users: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais
       return {
         numero_affaire: false,
         numero_dm: false,
@@ -198,17 +247,45 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: true,
         date_limite_livraison_attendue: false,
-        date_limite_livraison_client: false, // Hidden for infograph/atelier
+        date_limite_livraison_client: false, // Hidden for infograph
         statut: true,
         etape: true,
         atelier_concerne: true,
         infograph_en_charge: true,
         agent_impression: true,
+        machine_impression: false, // Not visible to infograph users
         date_limite_livraison_estimee: true,
         estimated_work_time_minutes: false,
         bat: true,
         express: true,
-        pack_fin_annee: true,
+        pack_fin_annee: false,
+        type_sous_traitance: false, // Hidden from infograph users
+        commentaires: false
+      }
+    } else if (user?.role === 'atelier') {
+      // For atelier users: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Machine impression - Statut - Délais - Type sous-traitance
+      return {
+        numero_affaire: false,
+        numero_dm: false,
+        client_info: true,
+        commercial_en_charge: false,
+        product_name: true,
+        quantity: true,
+        numero_pms: true,
+        date_limite_livraison_attendue: false,
+        date_limite_livraison_client: false, // Hidden for atelier
+        statut: true,
+        etape: true,
+        atelier_concerne: true,
+        infograph_en_charge: true,
+        agent_impression: true,
+        machine_impression: true, // Visible to atelier users
+        date_limite_livraison_estimee: true,
+        estimated_work_time_minutes: false,
+        bat: true,
+        express: true,
+        pack_fin_annee: false,
+        type_sous_traitance: true, // Visible to atelier users
         commentaires: false
       }
     } else {
@@ -228,11 +305,13 @@ const DashboardPageClean = () => {
         atelier_concerne: true,
         infograph_en_charge: true,
         agent_impression: true,
+        machine_impression: true,
         date_limite_livraison_estimee: true,
         estimated_work_time_minutes: true,
         bat: true,
         express: true,
-        pack_fin_annee: true,
+        pack_fin_annee: false,
+        type_sous_traitance: true,
         commentaires: true
       }
     }
@@ -279,11 +358,13 @@ const DashboardPageClean = () => {
               atelier_concerne: orderProduct.atelier_concerne,
               infograph_en_charge: orderProduct.infograph_en_charge,
               agent_impression: orderProduct.agent_impression,
+              machine_impression: orderProduct.machine_impression,
               date_limite_livraison_estimee: orderProduct.date_limite_livraison_estimee,
               estimated_work_time_minutes: orderProduct.estimated_work_time_minutes,
               bat: orderProduct.bat,
               express: orderProduct.express,
               pack_fin_annee: orderProduct.pack_fin_annee,
+              type_sous_traitance: orderProduct.type_sous_traitance,
               commentaires: orderProduct.commentaires,
               finitions: orderProduct.finitions || [], // Legacy finitions field for backward compatibility
               orderProductFinitions: orderProduct.orderProductFinitions || [], // New finitions structure
@@ -451,6 +532,8 @@ const DashboardPageClean = () => {
     const statusConfig = {
       'problem_technique': { label: 'Problème technique', color: 'bg-yellow-100 text-yellow-800' },
       'en_cours': { label: 'En cours', color: 'bg-blue-100 text-blue-800' },
+      'attente_validation': { label: 'Attente de validation', color: 'bg-orange-100 text-orange-800' },
+      'modification': { label: 'Modification', color: 'bg-indigo-100 text-indigo-800' },
       'termine': { label: 'Terminé', color: 'bg-purple-100 text-purple-800' },
       'livre': { label: 'Livré', color: 'bg-green-100 text-green-800' },
       'annule': { label: 'Annulé', color: 'bg-red-100 text-red-800' }
@@ -491,7 +574,7 @@ const DashboardPageClean = () => {
         'infograph_en_charge', 'date_limite_livraison_estimee', 
         'estimated_work_time_minutes', 'bat', 'express', 'pack_fin_annee', 'commentaires', 'finitions'
       ], // Infograph can edit product-level fields
-      atelier: ['statut', 'etape', 'atelier_concerne', 'agent_impression', 'commentaires', 'date_limite_livraison_estimee', 'pack_fin_annee'] // Atelier can edit limited fields including délais
+      atelier: ['statut', 'etape', 'atelier_concerne', 'agent_impression', 'machine_impression', 'commentaires', 'date_limite_livraison_estimee', 'pack_fin_annee', 'type_sous_traitance'] // Atelier can edit limited fields including délais, machine impression, and type sous-traitance
     }
     
     const userRole = user?.role || 'guest'
@@ -501,10 +584,15 @@ const DashboardPageClean = () => {
   }
 
   // Inline editing functions
-  const handleInlineEdit = (orderProductId, field, currentValue) => {
+  const handleInlineEdit = (orderProductId, field, currentValue, orderProductRow = null) => {
     // Check if user can edit this field
     if (!isFieldEditable(field)) {
       return // Not allowed to edit this field
+    }
+    
+    // Special check for type_sous_traitance: only editable if atelier is 'sous-traitance'
+    if (field === 'type_sous_traitance' && orderProductRow && orderProductRow.atelier_concerne !== 'sous-traitance') {
+      return // Not allowed to edit type_sous_traitance when atelier is not 'sous-traitance'
     }
     
     const editKey = `${orderProductId}-${field}`
@@ -1057,6 +1145,9 @@ const DashboardPageClean = () => {
     const isEditing = inlineEditing[editKey]
     const tempValue = tempValues[editKey]
 
+    // Get dynamic status options based on atelier_concerne
+    const dynamicStatusOptions = getStatusOptionsByAtelier(orderProductRow.atelier_concerne)
+
     if (isEditing) {
       return (
         <div className="inline-edit">
@@ -1085,7 +1176,7 @@ const DashboardPageClean = () => {
             className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             autoFocus
           >
-            {statusOptions.map(status => (
+            {dynamicStatusOptions.map(status => (
               <option key={status.value} value={status.value}>
                 {status.label}
               </option>
@@ -1225,6 +1316,61 @@ const DashboardPageClean = () => {
     )
   }
 
+  const renderInlineMachineImpression = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-machine_impression`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <input
+            type="text"
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'machine_impression', newValue)
+            }}
+            onBlur={() => {
+              const finalValue = tempValues[editKey] || ''
+              saveInlineEdit(orderProductRow.orderProductId, 'machine_impression', finalValue)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const finalValue = e.target.value
+                saveInlineEdit(orderProductRow.orderProductId, 'machine_impression', finalValue)
+              } else if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'machine_impression')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full"
+            placeholder="Nom de la machine"
+            autoFocus
+          />
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('machine_impression')
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'machine_impression', orderProductRow.machine_impression)}
+        title={!fieldEditable ? "Lecture seule" : "Cliquer pour modifier"}
+      >
+        <div className="flex items-center justify-between">
+          <span>{orderProductRow.machine_impression || '-'}</span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const renderInlinePackFinAnnee = (orderProductRow) => {
     const editKey = `${orderProductRow.orderProductId}-pack_fin_annee`
     const isEditing = inlineEditing[editKey]
@@ -1284,6 +1430,71 @@ const DashboardPageClean = () => {
           </span>
           {fieldEditable && (
             <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderInlineSousTraitance = (orderProductRow) => {
+    const editKey = `${orderProductRow.orderProductId}-type_sous_traitance`
+    const isEditing = inlineEditing[editKey]
+    const tempValue = tempValues[editKey]
+
+    if (isEditing) {
+      return (
+        <div className="inline-edit">
+          <select
+            value={tempValue || ''}
+            onChange={(e) => {
+              const newValue = e.target.value
+              handleTempValueChange(orderProductRow.orderProductId, 'type_sous_traitance', newValue)
+              saveInlineEdit(orderProductRow.orderProductId, 'type_sous_traitance', newValue)
+            }}
+            onBlur={() => cancelInlineEdit(orderProductRow.orderProductId, 'type_sous_traitance')}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                cancelInlineEdit(orderProductRow.orderProductId, 'type_sous_traitance')
+              }
+            }}
+            className="text-sm border border-blue-300 rounded px-2 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          >
+            <option value="">-</option>
+            {sousTraitanceOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )
+    }
+
+    const fieldEditable = isFieldEditable('type_sous_traitance') && orderProductRow.atelier_concerne === 'sous-traitance'
+
+    const getTitle = () => {
+      if (!isFieldEditable('type_sous_traitance')) {
+        return "Lecture seule"
+      }
+      if (orderProductRow.atelier_concerne !== 'sous-traitance') {
+        return "Non modifiable - L'atelier doit être 'sous-traitance'"
+      }
+      return "Cliquer pour modifier"
+    }
+
+    return (
+      <div 
+        className={`${!fieldEditable ? 'px-2 py-1' : 'cursor-pointer hover:bg-gray-100 px-2 py-1 rounded transition-colors duration-200 group'} inline-edit`}
+        onClick={() => handleInlineEdit(orderProductRow.orderProductId, 'type_sous_traitance', orderProductRow.type_sous_traitance, orderProductRow)}
+        title={getTitle()}
+      >
+        <div className="flex items-center justify-between">
+          <span>{orderProductRow.type_sous_traitance || '-'}</span>
+          {fieldEditable && (
+            <svg className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           )}
@@ -1391,6 +1602,7 @@ const DashboardPageClean = () => {
         atelier_concerne: orderProductRow.atelier_concerne,
         infograph_en_charge: orderProductRow.infograph_en_charge,
         agent_impression: orderProductRow.agent_impression,
+        machine_impression: orderProductRow.machine_impression,
         date_limite_livraison_estimee: orderProductRow.date_limite_livraison_estimee,
         estimated_work_time_minutes: orderProductRow.estimated_work_time_minutes,
         bat: orderProductRow.bat,
@@ -1435,6 +1647,7 @@ const DashboardPageClean = () => {
         numero_pms: orderProductRow.numero_pms,
         infograph_en_charge: orderProductRow.infograph_en_charge,
         agent_impression: orderProductRow.agent_impression,
+        machine_impression: orderProductRow.machine_impression,
         date_limite_livraison_estimee: orderProductRow.date_limite_livraison_estimee,
         etape: orderProductRow.etape,
         atelier_concerne: orderProductRow.atelier_concerne,
@@ -1443,6 +1656,7 @@ const DashboardPageClean = () => {
         express: orderProductRow.express,
         pack_fin_annee: orderProductRow.pack_fin_annee,
         commentaires: orderProductRow.commentaires,
+        type_sous_traitance: orderProductRow.type_sous_traitance,
         statut: orderProductRow.statut,
         finitions: orderProductRow.finitions || [], // Legacy finitions for backward compatibility
         orderProductFinitions: orderProductRow.orderProductFinitions || [] // New finitions structure
@@ -1643,6 +1857,17 @@ const DashboardPageClean = () => {
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
 
+              {/* Machine Impression Filter - Only visible for admin and atelier users */}
+              {(user?.role === 'admin' || user?.role === 'atelier') && (
+                <input
+                  type="text"
+                  placeholder="Machine impression"
+                  value={filters.machine_impression}
+                  onChange={(e) => setFilters({ ...filters, machine_impression: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              )}
+
               {/* Etape Filter */}
               <select
                 value={filters.etape}
@@ -1690,6 +1915,20 @@ const DashboardPageClean = () => {
                 <option value="false">Non</option>
               </select>
 
+              {/* Type Sous-traitance Filter */}
+              <select
+                value={filters.type_sous_traitance || ''}
+                onChange={(e) => setFilters({ ...filters, type_sous_traitance: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">Type sous-traitance</option>
+                {sousTraitanceOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
               {/* Clear Filters */}
               {Object.values(filters).some(v => v !== '' && v !== 'all') && (
                 <button
@@ -1700,10 +1939,12 @@ const DashboardPageClean = () => {
                     atelier: '',
                     infograph: '',
                     agent_impression: '',
+                    machine_impression: '',
                     etape: '',
                     express: '',
                     bat: '',
                     pack_fin_annee: '',
+                    type_sous_traitance: '',
                     search: '',
                     date_from: '',
                     date_to: '',
@@ -1780,103 +2021,113 @@ const DashboardPageClean = () => {
               <tr>
                 {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
                 {visibleColumns.atelier_concerne && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Atelier
                   </th>
                 )}
                 {visibleColumns.client_info && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Client
                   </th>
                 )}
                 {visibleColumns.product_name && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Produit
                   </th>
                 )}
                 {visibleColumns.quantity && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Quantité
                   </th>
                 )}
                 {visibleColumns.bat && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     BAT
                   </th>
                 )}
                 {visibleColumns.express && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Express
                   </th>
                 )}
                 {visibleColumns.pack_fin_annee && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Pack fin d'année
                   </th>
                 )}
                 {visibleColumns.infograph_en_charge && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Graphiste
                   </th>
                 )}
                 {visibleColumns.numero_pms && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     N° PMS
                   </th>
                 )}
                 {visibleColumns.etape && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Étape
                   </th>
                 )}
                 {visibleColumns.agent_impression && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Agent impression
                   </th>
                 )}
+                {visibleColumns.machine_impression && (
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Machine impression
+                  </th>
+                )}
                 {visibleColumns.statut && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Statut
                   </th>
                 )}
                 {visibleColumns.date_limite_livraison_estimee && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Délais
                   </th>
                 )}
                 {visibleColumns.date_limite_livraison_client && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Délai Client
                   </th>
                 )}
                 {/* Other columns for non-infograph/atelier roles */}
                 {visibleColumns.numero_affaire && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     N° Affaire
                   </th>
                 )}
                 {visibleColumns.numero_dm && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     N° DM
                   </th>
                 )}
                 {visibleColumns.commercial_en_charge && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Commercial
                   </th>
                 )}
                 {visibleColumns.estimated_work_time_minutes && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Temps (min)
                   </th>
                 )}
                 {visibleColumns.commentaires && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Commentaires
                   </th>
                 )}
+                {visibleColumns.type_sous_traitance && (
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type sous-traitance
+                  </th>
+                )}
                 {canDeleteOrders() && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 )}
@@ -1903,105 +2154,115 @@ const DashboardPageClean = () => {
                       className={`transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(row)}`}
                       onClick={(e) => handleRowClick(row, e)}
                     >
-                      {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
+                      {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Machine impression - Statut - Délais */}
                       {visibleColumns.atelier_concerne && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineAtelier(row)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {row.client_info}
                         </td>
                       )}
                       {visibleColumns.product_name && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {row.product_name}
                         </td>
                       )}
                       {visibleColumns.quantity && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'quantity', row.quantity)}
                         </td>
                       )}
                       {visibleColumns.bat && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineBat(row)}
                         </td>
                       )}
                       {visibleColumns.express && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {visibleColumns.pack_fin_annee && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlinePackFinAnnee(row)}
                         </td>
                       )}
                       {visibleColumns.infograph_en_charge && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineInfograph(row)}
                         </td>
                       )}
                       {visibleColumns.numero_pms && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_pms', row.numero_pms)}
                         </td>
                       )}
                       {visibleColumns.etape && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineEtape(row)}
                         </td>
                       )}
                       {visibleColumns.agent_impression && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineAgentImpression(row)}
                         </td>
                       )}
+                      {visibleColumns.machine_impression && (
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineMachineImpression(row)}
+                        </td>
+                      )}
                       {visibleColumns.statut && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineStatus(row)}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_estimee && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_client && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_attendue')}
                         </td>
                       )}
                       {/* Other columns for non-infograph/atelier roles */}
                       {visibleColumns.numero_affaire && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
                         </td>
                       )}
                       {visibleColumns.numero_dm && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_dm', row.numero_dm)}
                         </td>
                       )}
                       {visibleColumns.commercial_en_charge && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {row.commercial_en_charge}
                         </td>
                       )}
                       {visibleColumns.estimated_work_time_minutes && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
                         </td>
                       )}
                       {visibleColumns.commentaires && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'commentaires', row.commentaires || '-')}
                         </td>
                       )}
+                      {visibleColumns.type_sous_traitance && (
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineSousTraitance(row)}
+                        </td>
+                      )}
                       {canDeleteOrders() && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center gap-2 action-button">
                             <button
                               onClick={(e) => {
@@ -2042,105 +2303,115 @@ const DashboardPageClean = () => {
                       className={`transition-colors duration-200 cursor-pointer ${getRowBackgroundClass(row)}`}
                       onClick={(e) => handleRowClick(row, e)}
                     >
-                      {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
+                      {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Machine impression - Statut - Délais */}
                       {visibleColumns.atelier_concerne && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineAtelier(row)}
                         </td>
                       )}
                       {visibleColumns.client_info && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {row.client_info}
                         </td>
                       )}
                       {visibleColumns.product_name && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {row.product_name}
                         </td>
                       )}
                       {visibleColumns.quantity && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'quantity', row.quantity)}
                         </td>
                       )}
                       {visibleColumns.bat && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineBat(row)}
                         </td>
                       )}
                       {visibleColumns.express && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineSelect(row, 'express', expressOptions)}
                         </td>
                       )}
                       {visibleColumns.pack_fin_annee && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlinePackFinAnnee(row)}
                         </td>
                       )}
                       {visibleColumns.infograph_en_charge && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineInfograph(row)}
                         </td>
                       )}
                       {visibleColumns.numero_pms && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_pms', row.numero_pms)}
                         </td>
                       )}
                       {visibleColumns.etape && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineEtape(row)}
                         </td>
                       )}
                       {visibleColumns.agent_impression && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineAgentImpression(row)}
                         </td>
                       )}
+                      {visibleColumns.machine_impression && (
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineMachineImpression(row)}
+                        </td>
+                      )}
                       {visibleColumns.statut && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineStatus(row)}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_estimee && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_estimee')}
                         </td>
                       )}
                       {visibleColumns.date_limite_livraison_client && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineDate(row, 'date_limite_livraison_attendue')}
                         </td>
                       )}
                       {/* Other columns for non-infograph/atelier roles */}
                       {visibleColumns.numero_affaire && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_affaire', row.numero_affaire)}
                         </td>
                       )}
                       {visibleColumns.numero_dm && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'numero_dm', row.numero_dm)}
                         </td>
                       )}
                       {visibleColumns.commercial_en_charge && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {row.commercial_en_charge}
                         </td>
                       )}
                       {visibleColumns.estimated_work_time_minutes && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineNumber(row, 'estimated_work_time_minutes', row.estimated_work_time_minutes, ' min')}
                         </td>
                       )}
                       {visibleColumns.commentaires && (
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           {renderInlineText(row, 'commentaires', row.commentaires || '-')}
                         </td>
                       )}
+                      {visibleColumns.type_sous_traitance && (
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
+                          {renderInlineSousTraitance(row)}
+                        </td>
+                      )}
                       {canDeleteOrders() && (
-                        <td className="px-6 py-2 whitespace-nowrap text-sm text-gray-900">
+                        <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center gap-2 action-button">
                             <button
                               onClick={(e) => {

@@ -47,7 +47,6 @@ module.exports = (sequelize) => {
     numero_pms: {
       type: DataTypes.STRING,
       allowNull: true,
-      unique: true,
       comment: 'Numéro PMS spécifique à ce produit'
     },
     infograph_en_charge: {
@@ -102,11 +101,21 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Agent d\'impression assigné à ce produit spécifique'
     },
+    machine_impression: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Machine d\'impression assignée à ce produit spécifique'
+    },
     pack_fin_annee: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
       comment: 'Indique si ce produit fait partie d\'un pack fin d\'année'
+    },
+    type_sous_traitance: {
+      type: DataTypes.ENUM('Offset', 'Sérigraphie', 'Objet publicitaire', 'Autre'),
+      allowNull: true,
+      comment: 'Type de sous-traitance pour ce produit spécifique'
     }
   }, {
     tableName: 'order_products',

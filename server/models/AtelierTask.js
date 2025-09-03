@@ -23,18 +23,9 @@ module.exports = (sequelize) => {
       comment: 'Description détaillée de la tâche'
     },
     assigned_to: {
-      type: DataTypes.STRING,
+      type: DataTypes.JSON,
       allowNull: true,
-      comment: 'Nom de la personne assignée à la tâche'
-    },
-    priority: {
-      type: DataTypes.ENUM('low', 'medium', 'high', 'urgent'),
-      allowNull: false,
-      defaultValue: 'medium',
-      validate: {
-        isIn: [['low', 'medium', 'high', 'urgent']]
-      },
-      comment: 'Priorité de la tâche'
+      comment: 'Array of assigned user IDs or usernames'
     },
     status: {
       type: DataTypes.ENUM('pending', 'in_progress', 'completed', 'cancelled'),
@@ -46,29 +37,13 @@ module.exports = (sequelize) => {
       comment: 'Statut de la tâche'
     },
     atelier_type: {
-      type: DataTypes.ENUM('petit_format', 'grand_format', 'sous_traitance', 'general'),
+      type: DataTypes.ENUM('type_extern', 'type_intern'),
       allowNull: false,
-      defaultValue: 'general',
+      defaultValue: 'type_extern',
       validate: {
-        isIn: [['petit_format', 'grand_format', 'sous_traitance', 'general']]
+        isIn: [['type_extern', 'type_intern']]
       },
-      comment: 'Type d\'atelier concerné'
-    },
-    estimated_duration_minutes: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        min: 0
-      },
-      comment: 'Durée estimée en minutes'
-    },
-    actual_duration_minutes: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        min: 0
-      },
-      comment: 'Durée réelle en minutes'
+      comment: 'Type de tâche'
     },
     due_date: {
       type: DataTypes.DATE,
@@ -84,15 +59,6 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true,
       comment: 'Date de fin effective'
-    },
-    order_id: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: 'orders',
-        key: 'id'
-      },
-      comment: 'ID de la commande associée (optionnel)'
     },
     created_by: {
       type: DataTypes.INTEGER,
@@ -133,12 +99,6 @@ module.exports = (sequelize) => {
 
   // Define associations
   AtelierTask.associate = function(models) {
-    // AtelierTask belongs to an order (optional)
-    AtelierTask.belongsTo(models.Order, {
-      foreignKey: 'order_id',
-      as: 'order'
-    });
-    
     // AtelierTask belongs to a user (creator)
     AtelierTask.belongsTo(models.User, {
       foreignKey: 'created_by',

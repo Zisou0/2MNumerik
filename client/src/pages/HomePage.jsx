@@ -386,7 +386,7 @@ function HomePage() {
       </div>
 
       {/* Quick Actions */}
-      <div className={`grid grid-cols-1 gap-8 ${(user?.role === 'admin' || user?.role === 'commercial') ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+      <div className={`grid grid-cols-1 gap-8 ${(user?.role === 'admin' || user?.role === 'commercial') ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
         {/* Only show "Nouvelle Commande" for admin and commercial users */}
         {(user?.role === 'admin' || user?.role === 'commercial') && (
           <a href="/dashboard" className="group bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-blue-200">
@@ -423,18 +423,6 @@ function HomePage() {
             </div>
             <h3 className="text-2xl font-bold text-gray-900 group-hover:text-orange-600 transition-colors mb-3">Historique</h3>
             <p className="text-gray-600 text-lg leading-relaxed">Consulter les commandes terminées et annulées</p>
-          </div>
-        </a>
-
-        <a href="/products" className="group bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-purple-200">
-          <div className="flex flex-col items-center text-center">
-            <div className="p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg group-hover:shadow-purple-200 transition-all mb-6">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors mb-3">Catalogue</h3>
-            <p className="text-gray-600 text-lg leading-relaxed">Découvrir notre gamme complète de produits</p>
           </div>
         </a>
       </div>

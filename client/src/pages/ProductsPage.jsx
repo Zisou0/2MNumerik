@@ -63,21 +63,23 @@ const ProductsPage = () => {
   const [formData, setFormData] = useState({
     name: '',
     estimated_creation_time: '',
-    atelier_type: ''
+    atelier_types: []
   })
 
   const [finitionFormData, setFinitionFormData] = useState({
-    finitionId: '',
-    is_default: false,
-    additional_cost: 0,
-    additional_time: 0
+    finitionId: ''
+  })
+
+  // Finition search state
+  const [finitionSearchState, setFinitionSearchState] = useState({
+    searchTerm: '',
+    isOpen: false,
+    filteredFinitions: []
   })
 
   const [finitionManagementData, setFinitionManagementData] = useState({
     name: '',
     description: '',
-    price_modifier: 0,
-    time_modifier: 0,
     active: true
   })
 
@@ -142,11 +144,20 @@ const ProductsPage = () => {
     }))
   }
 
+  const handleAtelierChange = (atelierType) => {
+    setFormData(prev => ({
+      ...prev,
+      atelier_types: prev.atelier_types.includes(atelierType)
+        ? prev.atelier_types.filter(type => type !== atelierType)
+        : [...prev.atelier_types, atelierType]
+    }))
+  }
+
   const resetForm = () => {
     setFormData({
       name: '',
       estimated_creation_time: '',
-      atelier_type: ''
+      atelier_types: []
     })
     setEditingProduct(null)
   }
@@ -178,7 +189,7 @@ const ProductsPage = () => {
     setFormData({
       name: product.name,
       estimated_creation_time: product.estimated_creation_time,
-      atelier_type: product.atelier_type || ''
+      atelier_types: product.atelier_types || []
     })
     setShowModal(true)
   }
@@ -222,22 +233,52 @@ const ProductsPage = () => {
       setAvailableFinitions([])
     }
     
-    // Reset form
+    // Reset form and search state
     setFinitionFormData({
-      finitionId: '',
-      is_default: false,
-      additional_cost: 0,
-      additional_time: 0
+      finitionId: ''
+    })
+    setFinitionSearchState({
+      searchTerm: '',
+      isOpen: false,
+      filteredFinitions: []
     })
     
     setShowFinitionModal(true)
   }
 
   const handleFinitionInputChange = (e) => {
-    const { id, value, type, checked } = e.target
+    const { id, value } = e.target
     setFinitionFormData(prev => ({
       ...prev,
-      [id]: type === 'checkbox' ? checked : value
+      [id]: value
+    }))
+  }
+
+  // Finition search helper functions
+  const updateFinitionSearch = (searchTerm) => {
+    const filteredFinitions = availableFinitions
+      .filter(finition => finition.name.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    setFinitionSearchState({
+      searchTerm,
+      isOpen: true,
+      filteredFinitions
+    })
+  }
+
+  const selectFinitionFromSearch = (finition) => {
+    setFinitionFormData({ finitionId: finition.id })
+    setFinitionSearchState({
+      searchTerm: finition.name,
+      isOpen: false,
+      filteredFinitions: []
+    })
+  }
+
+  const closeFinitionSearch = () => {
+    setFinitionSearchState(prev => ({
+      ...prev,
+      isOpen: false
     }))
   }
 
@@ -251,12 +292,7 @@ const ProductsPage = () => {
     try {
       await finitionAPI.addFinitionToProduct(
         selectedProduct.id,
-        finitionFormData.finitionId,
-        {
-          is_default: finitionFormData.is_default,
-          additional_cost: parseFloat(finitionFormData.additional_cost) || 0,
-          additional_time: parseInt(finitionFormData.additional_time) || 0
-        }
+        finitionFormData.finitionId
       )
       
       setSuccess('Finition ajoutée avec succès')
@@ -266,23 +302,20 @@ const ProductsPage = () => {
       const addedFinition = allFinitions.find(f => f.id === parseInt(finitionFormData.finitionId))
       if (addedFinition) {
         const newFinition = {
-          ...addedFinition,
-          productFinition: {
-            is_default: finitionFormData.is_default,
-            additional_cost: parseFloat(finitionFormData.additional_cost) || 0,
-            additional_time: parseInt(finitionFormData.additional_time) || 0
-          }
+          ...addedFinition
         }
         setProductFinitions([...productFinitions, newFinition])
         setAvailableFinitions(availableFinitions.filter(f => f.id !== parseInt(finitionFormData.finitionId)))
       }
       
-      // Reset form
+      // Reset form and search state
       setFinitionFormData({
-        finitionId: '',
-        is_default: false,
-        additional_cost: 0,
-        additional_time: 0
+        finitionId: ''
+      })
+      setFinitionSearchState({
+        searchTerm: '',
+        isOpen: false,
+        filteredFinitions: []
       })
     } catch (err) {
       setError('Erreur lors de l\'ajout de la finition: ' + err.message)
@@ -306,29 +339,6 @@ const ProductsPage = () => {
     }
   }
 
-  const toggleDefaultFinition = async (finitionId, currentDefault) => {
-    try {
-      await finitionAPI.updateProductFinition(
-        selectedProduct.id,
-        finitionId,
-        { is_default: !currentDefault }
-      )
-      setSuccess('Finition mise à jour avec succès')
-      loadProducts(productsPagination.currentPage) // Reload to get updated data
-      
-      // Update local state
-      setProductFinitions(productFinitions.map(f => ({
-        ...f,
-        productFinition: {
-          ...f.productFinition,
-          is_default: f.id === finitionId ? !currentDefault : false
-        }
-      })))
-    } catch (err) {
-      setError('Erreur lors de la mise à jour de la finition: ' + err.message)
-    }
-  }
-
   // Finition Management Functions
   const handleFinitionManagementInputChange = (e) => {
     const { id, value, type, checked } = e.target
@@ -342,8 +352,6 @@ const ProductsPage = () => {
     setFinitionManagementData({
       name: '',
       description: '',
-      price_modifier: 0,
-      time_modifier: 0,
       active: true
     })
     setEditingFinition(null)
@@ -376,8 +384,6 @@ const ProductsPage = () => {
     setFinitionManagementData({
       name: finition.name,
       description: finition.description || '',
-      price_modifier: finition.price_modifier || 0,
-      time_modifier: finition.time_modifier || 0,
       active: finition.active
     })
     setShowFinitionManagementModal(true)
@@ -548,10 +554,17 @@ const ProductsPage = () => {
                     {product.estimated_creation_time} heures
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {product.atelier_type ? (
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getAtelierTypeBadgeColor(product.atelier_type)}`}>
-                        {formatAtelierType(product.atelier_type)}
-                      </span>
+                    {product.atelier_types && product.atelier_types.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {product.atelier_types.map((atelierType) => (
+                          <span 
+                            key={atelierType}
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${getAtelierTypeBadgeColor(atelierType)}`}
+                          >
+                            {formatAtelierType(atelierType)}
+                          </span>
+                        ))}
+                      </div>
                     ) : (
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
                         Non assigné
@@ -564,11 +577,7 @@ const ProductsPage = () => {
                         {product.finitions.slice(0, 3).map((finition) => (
                           <span 
                             key={finition.id} 
-                            className={`px-2 py-1 text-xs rounded-full ${
-                              finition.productFinition?.is_default 
-                                ? 'bg-blue-100 text-blue-800 border border-blue-300' 
-                                : 'bg-gray-100 text-gray-800'
-                            }`}
+                            className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800"
                           >
                             {finition.name}
                           </span>
@@ -648,10 +657,17 @@ const ProductsPage = () => {
                     <p><span className="font-medium">ID:</span> {product.id}</p>
                     <p><span className="font-medium">Temps estimé:</span> {product.estimated_creation_time} heures</p>
                     <p><span className="font-medium">Atelier:</span> 
-                      {product.atelier_type ? (
-                        <span className={`ml-1 px-2 py-1 text-xs font-medium rounded-full ${getAtelierTypeBadgeColor(product.atelier_type)}`}>
-                          {formatAtelierType(product.atelier_type)}
-                        </span>
+                      {product.atelier_types && product.atelier_types.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {product.atelier_types.map((atelierType) => (
+                            <span 
+                              key={atelierType}
+                              className={`px-2 py-1 text-xs font-medium rounded-full ${getAtelierTypeBadgeColor(atelierType)}`}
+                            >
+                              {formatAtelierType(atelierType)}
+                            </span>
+                          ))}
+                        </div>
                       ) : (
                         <span className="ml-1 px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">
                           Non assigné
@@ -666,11 +682,7 @@ const ProductsPage = () => {
                           {product.finitions.map((finition) => (
                             <span 
                               key={finition.id} 
-                              className={`px-2 py-1 text-xs rounded-full ${
-                                finition.productFinition?.is_default 
-                                  ? 'bg-blue-100 text-blue-800 border border-blue-300' 
-                                  : 'bg-gray-100 text-gray-800'
-                              }`}
+                              className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800"
                             >
                               {finition.name}
                             </span>
@@ -739,12 +751,6 @@ const ProductsPage = () => {
                     Nom de la finition
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Coût additionnel
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Temps additionnel
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actif
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -760,12 +766,6 @@ const ProductsPage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {finition.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {finition.price_modifier}€
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {finition.time_modifier} min
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {finition.active ? 'Oui' : 'Non'}
@@ -817,15 +817,15 @@ const ProductsPage = () => {
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold text-gray-900">{finition.name}</h3>
-                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                      {finition.price_modifier}€
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      finition.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {finition.active ? 'Actif' : 'Inactif'}
                     </span>
                   </div>
                   
                   <div className="space-y-1 text-sm text-gray-600">
                     <p><span className="font-medium">ID:</span> {finition.id}</p>
-                    <p><span className="font-medium">Coût additionnel:</span> {finition.price_modifier}€</p>
-                    <p><span className="font-medium">Temps additionnel:</span> {finition.time_modifier} min</p>
                     <p><span className="font-medium">Actif:</span> {finition.active ? 'Oui' : 'Non'}</p>
                   </div>
                 </div>
@@ -898,21 +898,27 @@ const ProductsPage = () => {
                 />
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Atelier assigné
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Ateliers assignés
                   </label>
-                  <select
-                    id="atelier_type"
-                    value={formData.atelier_type}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Sélectionner un atelier</option>
-                    <option value="petit_format">Petit Format</option>
-                    <option value="grand_format">Grand Format</option>
-                    <option value="sous_traitance">Sous-traitance</option>
-                    <option value="service_crea">Service Créa</option>
-                  </select>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'petit_format', label: 'Petit Format' },
+                      { value: 'grand_format', label: 'Grand Format' },
+                      { value: 'sous_traitance', label: 'Sous-traitance' },
+                      { value: 'service_crea', label: 'Service Créa' }
+                    ].map((atelier) => (
+                      <label key={atelier.value} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.atelier_types.includes(atelier.value)}
+                          onChange={() => handleAtelierChange(atelier.value)}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-700">{atelier.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
@@ -952,37 +958,12 @@ const ProductsPage = () => {
                       <div key={finition.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div>
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              finition.productFinition?.is_default 
-                                ? 'bg-blue-100 text-blue-800 border border-blue-300' 
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
+                            <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
                               {finition.name}
                             </span>
-                            {finition.productFinition?.is_default && (
-                              <span className="ml-2 text-xs text-blue-600 font-medium">Par défaut</span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            {finition.productFinition?.additional_cost > 0 && (
-                              <span className="mr-3">+{finition.productFinition.additional_cost}€</span>
-                            )}
-                            {finition.productFinition?.additional_time > 0 && (
-                              <span>+{finition.productFinition.additional_time}min</span>
-                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => toggleDefaultFinition(finition.id, finition.productFinition?.is_default)}
-                            className={`px-3 py-1 rounded text-sm transition-colors ${
-                              finition.productFinition?.is_default
-                                ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
-                          >
-                            {finition.productFinition?.is_default ? 'Retirer défaut' : 'Définir défaut'}
-                          </button>
                           <button
                             onClick={() => handleRemoveFinition(finition.id)}
                             className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1 rounded transition-colors text-sm"
@@ -1003,60 +984,94 @@ const ProductsPage = () => {
                 <div className="border-t pt-4">
                   <h4 className="text-md font-medium text-gray-700 mb-3">Ajouter une finition</h4>
                   <form onSubmit={handleAddFinition} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Finition
-                        </label>
-                        <select
-                          id="finitionId"
-                          value={finitionFormData.finitionId}
-                          onChange={handleFinitionInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          required
-                        >
-                          <option value="">Sélectionner une finition</option>
-                          {availableFinitions.map((finition) => (
-                            <option key={finition.id} value={finition.id}>
-                              {finition.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center">
+                    <div className="relative">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Finition
+                      </label>
+                      <div className="relative">
                         <input
-                          type="checkbox"
-                          id="is_default"
-                          checked={finitionFormData.is_default}
-                          onChange={handleFinitionInputChange}
-                          className="mr-2"
+                          type="text"
+                          value={finitionSearchState.searchTerm}
+                          onChange={(e) => updateFinitionSearch(e.target.value)}
+                          onFocus={() => updateFinitionSearch(finitionSearchState.searchTerm || '')}
+                          onBlur={() => setTimeout(closeFinitionSearch, 200)} // Delay to allow click on dropdown
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Rechercher une finition..."
+                          required={!finitionFormData.finitionId}
                         />
-                        <label htmlFor="is_default" className="text-sm text-gray-700">
-                          Par défaut
-                        </label>
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input
-                        label="Coût additionnel (€)"
-                        type="number"
-                        id="additional_cost"
-                        value={finitionFormData.additional_cost}
-                        onChange={handleFinitionInputChange}
-                        placeholder="0.00"
-                        min="0"
-                        step="0.01"
-                      />
-                      <Input
-                        label="Temps additionnel (min)"
-                        type="number"
-                        id="additional_time"
-                        value={finitionFormData.additional_time}
-                        onChange={handleFinitionInputChange}
-                        placeholder="0"
-                        min="0"
-                      />
+                      
+                      {/* Search Results Dropdown */}
+                      {finitionSearchState.isOpen && finitionSearchState.filteredFinitions.length > 0 && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {finitionSearchState.filteredFinitions.map((finition) => (
+                            <button
+                              key={finition.id}
+                              type="button"
+                              onClick={() => selectFinitionFromSearch(finition)}
+                              className="w-full px-3 py-3 text-left hover:bg-blue-50 hover:text-blue-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-gray-900">{finition.name}</span>
+                              </div>
+                              {finition.description && (
+                                <p className="text-sm text-gray-600 mt-1">{finition.description}</p>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* No Results Message */}
+                      {finitionSearchState.isOpen && 
+                       finitionSearchState.searchTerm.length > 0 &&
+                       finitionSearchState.filteredFinitions.length === 0 && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                          <div className="text-center text-gray-500">
+                            <svg className="w-6 h-6 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <p className="text-sm">Aucune finition trouvée pour "{finitionSearchState.searchTerm}"</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Show all finitions when no search term */}
+                      {(!finitionSearchState.searchTerm || finitionSearchState.searchTerm === '') &&
+                       finitionSearchState.isOpen && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {availableFinitions.length === 0 ? (
+                            <div className="p-4 text-center text-gray-500">
+                              <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              <p className="text-sm font-medium text-gray-600">Aucune finition disponible</p>
+                              <p className="text-xs text-gray-500 mt-1">Toutes les finitions sont déjà ajoutées</p>
+                            </div>
+                          ) : (
+                            availableFinitions.map((finition) => (
+                              <button
+                                key={finition.id}
+                                type="button"
+                                onClick={() => selectFinitionFromSearch(finition)}
+                                className="w-full px-3 py-3 text-left hover:bg-blue-50 hover:text-blue-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium text-gray-900">{finition.name}</span>
+                                </div>
+                                {finition.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{finition.description}</p>
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
                     
                     <Button type="submit" className="w-full">
@@ -1107,28 +1122,6 @@ const ProductsPage = () => {
                   placeholder="Entrez une description de la finition"
                   required
                 />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Modificateur de prix (€)"
-                    type="number"
-                    id="price_modifier"
-                    value={finitionManagementData.price_modifier}
-                    onChange={(e) => setFinitionManagementData({ ...finitionManagementData, price_modifier: parseFloat(e.target.value) })}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                  />
-                  <Input
-                    label="Modificateur de temps (min)"
-                    type="number"
-                    id="time_modifier"
-                    value={finitionManagementData.time_modifier}
-                    onChange={(e) => setFinitionManagementData({ ...finitionManagementData, time_modifier: parseInt(e.target.value) })}
-                    placeholder="0"
-                    min="0"
-                  />
-                </div>
 
                 <div className="flex items-center">
                   <input

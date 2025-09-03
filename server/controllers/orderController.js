@@ -13,10 +13,12 @@ class OrderController {
         infographe,
         infograph, // Alternative parameter name for frontend compatibility
         agent_impression, // Filter by atelier user (agent impression)
+        machine_impression, // Filter by machine impression
         etape,
         express,
         bat,
         pack_fin_annee,
+        type_sous_traitance,
         search,
         date_from,
         date_to,
@@ -41,12 +43,14 @@ class OrderController {
       if (atelier) productWhere.atelier_concerne = atelier;
       if (infographe || infograph) productWhere.infograph_en_charge = { [Op.like]: `%${infographe || infograph}%` };
       if (agent_impression) productWhere.agent_impression = { [Op.like]: `%${agent_impression}%` };
+      if (machine_impression) productWhere.machine_impression = { [Op.like]: `%${machine_impression}%` };
       if (etape) productWhere.etape = etape;
       if (express) productWhere.express = express;
       if (bat) productWhere.bat = bat;
       if (pack_fin_annee !== undefined && pack_fin_annee !== '') {
         productWhere.pack_fin_annee = pack_fin_annee === 'true';
       }
+      if (type_sous_traitance) productWhere.type_sous_traitance = type_sous_traitance;
       
       // PMS Search - only search in numero_pms field
       if (search) {
@@ -69,8 +73,26 @@ class OrderController {
         productWhere.statut = { [Op.notIn]: ['annule', 'livre'] };
       }
       
-      // Note: Role-based filtering removed - all users can now filter by any etape
-      // The etape filter was already set above on line 40: if (etape) productWhere.etape = etape;
+      // Apply role-based filtering
+      const userRole = req.user.role;
+      if (userRole === 'atelier') {
+        // Atelier can see products with:
+        // 1. petit format/grand format with etape 'impression' or 'finition'
+        // 2. sous-traitance with any etape
+        productWhere[Op.or] = [
+          {
+            atelier_concerne: { [Op.in]: ['petit format', 'grand format'] },
+            etape: { [Op.in]: ['impression', 'finition'] }
+          },
+          {
+            atelier_concerne: 'sous-traitance'
+          }
+        ];
+      } else if (userRole === 'infograph') {
+        // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition
+        // Note: etape filter was already set above on line 40: if (etape) productWhere.etape = etape;
+      }
+      // Commercial (or any other role) can see everything - no additional filtering
       
       // Handle client filtering separately if not part of search
       if (client && !search) {
@@ -370,44 +392,60 @@ class OrderController {
     try {
       const { id } = req.params;
       
-      // Build where clause with role-based filtering
-      const whereClause = { id };
       const userRole = req.user.role;
       
+      // Build include with role-based filtering
+      const orderProductsInclude = {
+        model: OrderProduct,
+        as: 'orderProducts',
+        include: [
+          {
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'name', 'estimated_creation_time']
+          },
+          {
+            model: OrderProductFinition,
+            as: 'orderProductFinitions',
+            include: [
+              {
+                model: Finition,
+                as: 'finition',
+                attributes: ['id', 'name', 'description']
+              }
+            ]
+          }
+        ]
+      };
+      
+      // Apply role-based filtering to orderProducts
       if (userRole === 'atelier') {
-        // Atelier can only see orders with etape 'impression'
-        whereClause.etape = { [Op.in]: ['impression'] };
+        // Atelier can see products with:
+        // 1. petit format/grand format with etape 'impression' or 'finition'
+        // 2. sous-traitance with any etape
+        orderProductsInclude.where = {
+          [Op.or]: [
+            {
+              atelier_concerne: { [Op.in]: ['petit format', 'grand format'] },
+              etape: { [Op.in]: ['impression', 'finition'] }
+            },
+            {
+              atelier_concerne: 'sous-traitance'
+            }
+          ]
+        };
       } else if (userRole === 'infograph') {
-        // Infograph can see orders with etape: conception, pré-presse, travail graphique, impression, finition
-        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
+        // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition
+        orderProductsInclude.where = {
+          etape: { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] }
+        };
       }
       // Commercial (or any other role) can see everything - no additional filtering
       
       const order = await Order.findOne({
-        where: whereClause,
+        where: { id },
         include: [
-          {
-            model: OrderProduct,
-            as: 'orderProducts',
-            include: [
-              {
-                model: Product,
-                as: 'product',
-                attributes: ['id', 'name', 'estimated_creation_time']
-              },
-              {
-                model: OrderProductFinition,
-                as: 'orderProductFinitions',
-                include: [
-                  {
-                    model: Finition,
-                    as: 'finition',
-                    attributes: ['id', 'name', 'description']
-                  }
-                ]
-              }
-            ]
-          },
+          orderProductsInclude,
           {
             model: Client,
             as: 'clientInfo',
@@ -532,6 +570,7 @@ class OrderController {
         numero_pms: product.numero_pms || null,
         infograph_en_charge: product.infograph_en_charge || null,
         agent_impression: product.agent_impression || null,
+        machine_impression: product.machine_impression || null,
         etape: product.etape || null,
         statut: product.statut || 'en_cours',
         estimated_work_time_minutes: product.estimated_work_time_minutes || null,
@@ -540,7 +579,8 @@ class OrderController {
         commentaires: product.commentaires || null,
         bat: product.bat || null,
         express: product.express || null,
-        pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true
+        pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
+        type_sous_traitance: product.type_sous_traitance || null
       }));
 
       const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
@@ -656,9 +696,6 @@ class OrderController {
     } catch (error) {
       await transaction.rollback();
       console.error('Create order error:', error);
-      if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(400).json({ message: 'Ce numéro PMS existe déjà' });
-      }
       res.status(500).json({ message: 'Erreur serveur' });
     }
   }
@@ -802,7 +839,8 @@ class OrderController {
           commentaires: product.commentaires || null,
           bat: product.bat || null,
           express: product.express || null,
-          pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true
+          pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
+          type_sous_traitance: product.type_sous_traitance || null
         }));
 
         const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
@@ -933,9 +971,6 @@ class OrderController {
     } catch (error) {
       await transaction.rollback();
       console.error('Update order error:', error);
-      if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(400).json({ message: 'Ce numéro PMS existe déjà' });
-      }
       res.status(500).json({ message: 'Erreur serveur' });
     }
   }
@@ -1000,8 +1035,18 @@ class OrderController {
       // Apply role-based filtering at product level
       const userRole = req.user.role;
       if (userRole === 'atelier') {
-        // Atelier can only see products with etape 'impression' or 'finition'
-        productWhere.etape = { [Op.in]: ['impression', 'finition'] };
+        // Atelier can see products with:
+        // 1. petit format/grand format with etape 'impression' or 'finition'
+        // 2. sous-traitance with any etape
+        productWhere[Op.or] = [
+          {
+            atelier_concerne: { [Op.in]: ['petit format', 'grand format'] },
+            etape: { [Op.in]: ['impression', 'finition'] }
+          },
+          {
+            atelier_concerne: 'sous-traitance'
+          }
+        ];
       } else if (userRole === 'infograph') {
         // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition
         productWhere.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
@@ -1045,6 +1090,219 @@ class OrderController {
     }
   }
 
+  // Get history orders (delivered and cancelled orders) with pagination
+  static async getHistoryOrders(req, res) {
+    try {
+      const { 
+        statut, 
+        commercial, 
+        client, 
+        atelier,
+        infographe,
+        agent_impression,
+        machine_impression,
+        etape,
+        express,
+        bat,
+        pack_fin_annee,
+        type_sous_traitance,
+        search,
+        page = 1, 
+        limit = 10
+      } = req.query;
+
+      const offset = (page - 1) * limit;
+
+      // Build where clause for order-level filtering
+      const whereClause = {};
+      
+      // Order-level filters
+      if (commercial) whereClause.commercial_en_charge = { [Op.like]: `%${commercial}%` };
+      
+      // Build product-level filters for history orders
+      const productWhere = {};
+      
+      // History orders: only delivered and cancelled, or specific status if provided
+      if (statut) {
+        if (statut === 'livre' || statut === 'annule') {
+          productWhere.statut = statut;
+        } else {
+          // Invalid status for history
+          return res.json({
+            message: 'Historique des commandes récupéré avec succès',
+            orders: [],
+            pagination: {
+              currentPage: parseInt(page),
+              totalPages: 0,
+              totalOrders: 0,
+              hasNextPage: false,
+              hasPrevPage: page > 1
+            }
+          });
+        }
+      } else {
+        // Show both delivered and cancelled
+        productWhere.statut = { [Op.in]: ['livre', 'annule'] };
+      }
+      
+      // Apply other product-level filters
+      if (atelier) productWhere.atelier_concerne = atelier;
+      if (infographe) productWhere.infograph_en_charge = { [Op.like]: `%${infographe}%` };
+      if (agent_impression) productWhere.agent_impression = { [Op.like]: `%${agent_impression}%` };
+      if (machine_impression) productWhere.machine_impression = { [Op.like]: `%${machine_impression}%` };
+      if (etape) productWhere.etape = etape;
+      if (express) productWhere.express = express;
+      if (bat) productWhere.bat = bat;
+      if (pack_fin_annee !== undefined && pack_fin_annee !== '') {
+        productWhere.pack_fin_annee = pack_fin_annee === 'true';
+      }
+      if (type_sous_traitance) productWhere.type_sous_traitance = type_sous_traitance;
+      
+      // PMS Search
+      if (search) {
+        productWhere.numero_pms = { [Op.like]: `%${search}%` };
+      }
+      
+      // Client filtering
+      if (client) {
+        whereClause[Op.or] = [
+          { client: { [Op.like]: `%${client}%` } },
+          { '$clientInfo.nom$': { [Op.like]: `%${client}%` } }
+        ];
+      }
+
+      // Query to find orders that have history products, ordered by most recent update
+      const orders = await Order.findAll({
+        where: whereClause,
+        include: [
+          {
+            model: OrderProduct,
+            as: 'orderProducts',
+            where: productWhere,
+            required: true, // Only orders that have history products
+            include: [
+              {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name', 'estimated_creation_time']
+              },
+              {
+                model: OrderProductFinition,
+                as: 'orderProductFinitions',
+                include: [
+                  {
+                    model: Finition,
+                    as: 'finition',
+                    attributes: ['id', 'name', 'description']
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            model: Client,
+            as: 'clientInfo',
+            attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client']
+          }
+        ],
+        order: [['updatedAt', 'DESC']],
+        distinct: true
+      });
+
+      // Flatten to order-product rows and apply pagination at the product level
+      const allProductRows = [];
+      orders.forEach(order => {
+        if (order.orderProducts && order.orderProducts.length > 0) {
+          order.orderProducts.forEach(orderProduct => {
+            allProductRows.push({
+              order,
+              orderProduct
+            });
+          });
+        }
+      });
+
+      // Sort by most recent update
+      allProductRows.sort((a, b) => new Date(b.order.updatedAt) - new Date(a.order.updatedAt));
+
+      // Apply pagination to the flattened results
+      const totalCount = allProductRows.length;
+      const paginatedRows = allProductRows.slice(offset, offset + parseInt(limit));
+
+      // Format the response to match the expected structure
+      const formattedOrders = [];
+      const orderMap = new Map();
+
+      paginatedRows.forEach(({ order, orderProduct }) => {
+        if (!orderMap.has(order.id)) {
+          orderMap.set(order.id, {
+            ...order.toJSON(),
+            orderProducts: []
+          });
+          formattedOrders.push(orderMap.get(order.id));
+        }
+        orderMap.get(order.id).orderProducts.push(orderProduct);
+      });
+
+      res.json({
+        message: 'Historique des commandes récupéré avec succès',
+        orders: formattedOrders,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalCount / limit),
+          totalOrders: totalCount,
+          hasNextPage: page * limit < totalCount,
+          hasPrevPage: page > 1
+        }
+      });
+    } catch (error) {
+      console.error('Get history orders error:', error);
+      res.status(500).json({ message: 'Erreur serveur' });
+    }
+  }
+
+  // Get history order statistics
+  static async getHistoryOrderStats(req, res) {
+    try {
+      // Query OrderProduct table to get history stats
+      const stats = await OrderProduct.findAll({
+        attributes: [
+          'statut',
+          [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+        ],
+        where: {
+          statut: { [Op.in]: ['livre', 'annule'] }
+        },
+        group: ['statut']
+      });
+
+      // Format the stats
+      const formattedStats = {
+        livre: 0,
+        annule: 0
+      };
+
+      stats.forEach(stat => {
+        if (stat.statut === 'livre' || stat.statut === 'annule') {
+          formattedStats[stat.statut] = parseInt(stat.dataValues.count);
+        }
+      });
+
+      const total = formattedStats.livre + formattedStats.annule;
+
+      res.json({
+        message: 'Statistiques historique récupérées avec succès',
+        stats: {
+          ...formattedStats,
+          total
+        }
+      });
+    } catch (error) {
+      console.error('Get history order stats error:', error);
+      res.status(500).json({ message: 'Erreur serveur' });
+    }
+  }
+
   // Update individual order product
   static async updateOrderProduct(req, res) {
     const transaction = await Order.sequelize.transaction();
@@ -1056,6 +1314,7 @@ class OrderController {
         numero_pms,
         infograph_en_charge,
         agent_impression,
+        machine_impression,
         date_limite_livraison_estimee,
         etape,
         atelier_concerne,
@@ -1064,7 +1323,8 @@ class OrderController {
         bat,
         express,
         pack_fin_annee,
-        commentaires
+        commentaires,
+        type_sous_traitance
       } = req.body;
 
       // Find the order product
@@ -1094,6 +1354,7 @@ class OrderController {
         numero_pms,
         infograph_en_charge,
         agent_impression,
+        machine_impression,
         date_limite_livraison_estimee,
         etape,
         atelier_concerne,
@@ -1102,7 +1363,8 @@ class OrderController {
         bat,
         express,
         pack_fin_annee: pack_fin_annee === 'true' || pack_fin_annee === true,
-        commentaires
+        commentaires,
+        type_sous_traitance
       }, { transaction });
 
       // Update overall order status if product status changed

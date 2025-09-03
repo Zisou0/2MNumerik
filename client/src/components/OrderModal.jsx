@@ -4,6 +4,7 @@ import { orderAPI, productAPI, apiCall } from '../utils/api'
 import Button from './ButtonComponent'
 import Input from './InputComponent'
 import ClientSearch from './ClientSearch'
+import AgentSelector from './AgentSelector'
 
 const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, etapeOptions, batOptions, expressOptions }) => {
   const { user } = useAuth()
@@ -26,14 +27,26 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   const [availableUsers, setAvailableUsers] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  // Type sous-traitance options
+  const typeSousTraitanceOptions = [
+    { value: 'Offset', label: 'Offset' },
+    { value: 'Sérigraphie', label: 'Sérigraphie' },
+    { value: 'Objet publicitaire', label: 'Objet publicitaire' },
+    { value: 'Autre', label: 'Autre' }
+  ]
   const [productsLoading, setProductsLoading] = useState(true)
   const [error, setError] = useState('')
   
   // Finition search state - object with keys as `${productIndex}-${finitionId}` for each product
   const [finitionSearchStates, setFinitionSearchStates] = useState({})
   
+  // Product search state - object with keys as `product-${productIndex}` for each product
+  const [productSearchStates, setProductSearchStates] = useState({})
+  
   // Refs for click-outside functionality
   const finitionSearchRefs = useRef({})
+  const productSearchRefs = useRef({})
 
   // Get fields visible for current user role
   const getVisibleFields = () => {
@@ -61,6 +74,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           express: true,
           pack_fin_annee: true,
           commentaires: true,
+          type_sous_traitance: true, // Visible to commercial users for sous-traitance
           finitions: false
         }
       }
@@ -79,15 +93,43 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         productLevel: {
           numero_pms: true,
           infograph_en_charge: true,
-          agent_impression: true,
+          agent_impression: false, // Hidden from infograph users
           date_limite_livraison_estimee: false,
           etape: true,
           atelier_concerne: true,
-          estimated_work_time_minutes: true,
+          estimated_work_time_minutes: false, // Hidden from infograph users
           bat: true,
           express: true,
           commentaires: true,
+          type_sous_traitance: false, // Hidden from infograph users
           finitions: true
+        }
+      }
+    } else if (user?.role === 'atelier') {
+      return {
+        // Step 1: Order level fields visible to atelier (read-only)
+        orderLevel: {
+          numero_affaire: false,
+          numero_dm: false,
+          client: true,
+          commercial_en_charge: false,
+          date_limite_livraison_attendue: false,
+          statut: false // Read-only for atelier
+        },
+        // Step 2: Product level fields visible to atelier (read-only except finitions)
+        productLevel: {
+          numero_pms: false, // Read-only for atelier
+          infograph_en_charge: false, // Read-only for atelier
+          agent_impression: false, // Read-only for atelier
+          date_limite_livraison_estimee: false,
+          etape: false, // Read-only for atelier
+          atelier_concerne: false, // Read-only for atelier
+          estimated_work_time_minutes: false, // Read-only for atelier
+          bat: false, // Read-only for atelier
+          express: false, // Read-only for atelier
+          commentaires: false, // Read-only for atelier
+          type_sous_traitance: false, // Read-only for atelier
+          finitions: true // Only editable field for atelier
         }
       }
     } else {
@@ -112,6 +154,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           bat: true,
           express: true,
           commentaires: true,
+          type_sous_traitance: true, // Visible to admin
           finitions: true
         }
       }
@@ -119,6 +162,19 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   }
 
   const visibleFields = getVisibleFields()
+
+  // Helper function to determine if a field should be read-only for the current user
+  const isFieldReadOnly = (fieldType, fieldName) => {
+    if (user?.role === 'atelier') {
+      // For atelier users, only finitions section is editable
+      if (fieldType === 'productLevel' && fieldName === 'finitions') {
+        return false // Editable
+      }
+      return true // All other fields are read-only
+    }
+    // For other roles, implement existing logic or return false for editable
+    return false
+  }
 
   // Fetch available products
   useEffect(() => {
@@ -209,8 +265,9 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
             estimated_work_time_minutes: orderProduct.estimated_work_time_minutes || '',
             bat: orderProduct.bat || '',
             express: orderProduct.express || '',
-            pack_fin_annee: orderProduct.pack_fin_annee || '',
+            pack_fin_annee: orderProduct.pack_fin_annee !== undefined ? orderProduct.pack_fin_annee.toString() : '',
             commentaires: orderProduct.commentaires || '',
+            type_sous_traitance: orderProduct.type_sous_traitance || '',
             finitions: finitions
           }
         })
@@ -226,14 +283,24 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     }
   }, [order, user])
 
-  // Handle click outside for finition search dropdowns
+  // Handle click outside for finition and product search dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // Handle finition search dropdowns
       Object.keys(finitionSearchStates).forEach(key => {
         const ref = finitionSearchRefs.current[key]
         if (ref && !ref.contains(event.target) && finitionSearchStates[key]?.isOpen) {
           const productIndex = parseInt(key.split('-')[1])
           closeFinitionSearch(productIndex)
+        }
+      })
+      
+      // Handle product search dropdowns
+      Object.keys(productSearchStates).forEach(key => {
+        const ref = productSearchRefs.current[key]
+        if (ref && !ref.contains(event.target) && productSearchStates[key]?.isOpen) {
+          const productIndex = parseInt(key.split('-')[2]) // product-search-{index}
+          closeProductSearch(productIndex)
         }
       })
     }
@@ -242,7 +309,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [finitionSearchStates])
+  }, [finitionSearchStates, productSearchStates])
 
   // Handler functions
   const handleOrderFormChange = (field, value) => {
@@ -269,7 +336,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     }
   }
 
-  // Helper function to map atelier options to product atelier_type
+  // Helper function to map atelier options to product atelier_types
   const mapAtelierToType = (atelierOption) => {
     const mapping = {
       'petit format': 'petit_format',
@@ -287,7 +354,17 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     const atelierType = mapAtelierToType(selectedAtelier)
     if (!atelierType) return availableProducts
     
-    return availableProducts.filter(product => product.atelier_type === atelierType)
+    // Check if the product has the selected atelier in its atelier_types array
+    return availableProducts.filter(product => {
+      // Handle both old single atelier_type and new multiple atelier_types
+      if (product.atelier_types && Array.isArray(product.atelier_types)) {
+        return product.atelier_types.includes(atelierType)
+      } else if (product.atelier_type) {
+        // Fallback for products that might still have the old single atelier_type
+        return product.atelier_type === atelierType
+      }
+      return false
+    })
   }
 
   const addProduct = () => {
@@ -305,8 +382,9 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       estimated_work_time_minutes: '',
       bat: '',
       express: '',
-      pack_fin_annee: '',
+      pack_fin_annee: 'false',
       commentaires: '',
+      type_sous_traitance: '',
       finitions: []
     }
     setSelectedProducts([...selectedProducts, newProduct])
@@ -331,6 +409,31 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         // For sous-traitance, remove etape completely
         updated[index] = { ...updated[index], etape: '' }
       }
+      
+      // Clear product search when atelier changes
+      const productSearchKey = getProductSearchKey(index)
+      setProductSearchStates(prev => ({
+        ...prev,
+        [productSearchKey]: {
+          searchTerm: '',
+          isOpen: false,
+          filteredProducts: []
+        }
+      }))
+    }
+    
+    // Update product search display name when productId changes
+    if (field === 'productId') {
+      const productSearchKey = getProductSearchKey(index)
+      const selectedProduct = availableProducts.find(p => p.id === value)
+      setProductSearchStates(prev => ({
+        ...prev,
+        [productSearchKey]: {
+          searchTerm: selectedProduct ? selectedProduct.name : '',
+          isOpen: false,
+          filteredProducts: []
+        }
+      }))
     }
     
     setSelectedProducts(updated)
@@ -382,6 +485,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
 
   // Finition-related functions
   const addFinitionToProduct = (productIndex, finitionId) => {
+    // Only commercial users are restricted from adding finitions
     if (user?.role === 'commercial') return
     
     const selectedProduct = availableProducts.find(p => p.id === selectedProducts[productIndex].productId)
@@ -418,6 +522,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   }
 
   const removeFinitionFromProduct = (productIndex, finitionId) => {
+    // Only commercial users are restricted from removing finitions
     if (user?.role === 'commercial') return
     
     const updated = [...selectedProducts]
@@ -429,6 +534,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   }
 
   const updateProductFinition = (productIndex, finitionId, field, value) => {
+    // Only commercial users are restricted from updating finitions
     if (user?.role === 'commercial') return
     
     const updated = [...selectedProducts]
@@ -488,7 +594,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       ...prev,
       [key]: {
         searchTerm,
-        isOpen: searchTerm.length > 0,
+        isOpen: true, // Always show dropdown when searching or clicking
         filteredFinitions
       }
     }))
@@ -516,6 +622,77 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         isOpen: false
       }
     }))
+  }
+
+  // Product search helper functions
+  const getProductSearchKey = (productIndex) => `product-search-${productIndex}`
+  
+  const initializeProductSearch = (productIndex) => {
+    const key = getProductSearchKey(productIndex)
+    if (!productSearchStates[key]) {
+      setProductSearchStates(prev => ({
+        ...prev,
+        [key]: {
+          searchTerm: '',
+          isOpen: false,
+          filteredProducts: []
+        }
+      }))
+    }
+  }
+
+  const updateProductSearch = (productIndex, searchTerm) => {
+    const key = getProductSearchKey(productIndex)
+    const product = selectedProducts[productIndex]
+    
+    if (!product.atelier_concerne) {
+      return
+    }
+
+    const availableProducts = getFilteredProducts(product.atelier_concerne)
+    const filteredProducts = availableProducts
+      .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    setProductSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        searchTerm,
+        isOpen: searchTerm.length > 0 || !product.productId,
+        filteredProducts
+      }
+    }))
+  }
+
+  const selectProductFromSearch = (productIndex, productObj) => {
+    const key = getProductSearchKey(productIndex)
+    updateProduct(productIndex, 'productId', productObj.id)
+    setProductSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        searchTerm: productObj.name,
+        isOpen: false,
+        filteredProducts: []
+      }
+    }))
+  }
+
+  const closeProductSearch = (productIndex) => {
+    const key = getProductSearchKey(productIndex)
+    setProductSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        isOpen: false
+      }
+    }))
+  }
+
+  const getSelectedProductName = (productIndex) => {
+    const product = selectedProducts[productIndex]
+    if (!product.productId) return ''
+    
+    const selectedProduct = availableProducts.find(p => p.id === product.productId)
+    return selectedProduct ? selectedProduct.name : ''
   }
 
   const handleSubmit = async (e) => {
@@ -813,19 +990,28 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                           </svg>
                         </div>
-                        <h4 className="text-lg font-semibold text-gray-800">Sélection et configuration des produits</h4>
+                        <h4 className="text-lg font-semibold text-gray-800">
+                          Sélection et configuration des produits
+                          {user?.role === 'atelier' && (
+                            <span className="text-orange-600 text-sm ml-2 font-normal">
+                              (Mode lecture seule - Finitions uniquement modifiables)
+                            </span>
+                          )}
+                        </h4>
                         <div className="flex-1 h-px bg-gradient-to-r from-green-200 to-transparent"></div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={addProduct}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm font-medium shadow-sm"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        Ajouter produit
-                      </button>
+                      {user?.role !== 'atelier' && (
+                        <button
+                          type="button"
+                          onClick={addProduct}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm font-medium shadow-sm"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                          Ajouter produit
+                        </button>
+                      )}
                     </div>
 
                     {productsLoading ? (
@@ -850,20 +1036,22 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                             <div key={index} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
                               <div className="flex items-center justify-between mb-4">
                                 <h5 className="font-medium text-gray-800">Produit {index + 1}</h5>
-                                <button
-                                  type="button"
-                                  onClick={() => removeProduct(index)}
-                                  className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors duration-200"
-                                  title="Supprimer ce produit"
-                                >
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
+                                {user?.role !== 'atelier' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeProduct(index)}
+                                    className="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors duration-200"
+                                    title="Supprimer ce produit"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
                               
                               {/* Atelier concerné field - moved to top and made required */}
-                              {visibleFields.productLevel.atelier_concerne && (
+                              {visibleFields.productLevel.atelier_concerne && user?.role !== 'atelier' && (
                                 <div className="mb-6">
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Atelier concerné *
@@ -895,274 +1083,58 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                 </div>
                               )}
 
+                              {/* Read-only atelier field for atelier users */}
+                              {user?.role === 'atelier' && (
+                                <div className="mb-6">
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Atelier concerné
+                                  </label>
+                                  <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                    {product.atelier_concerne || 'Non défini'}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Basic Product Selection */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                {/* Product field - editable for non-atelier, read-only for atelier */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Produit *
                                   </label>
-                                  <select
-                                    value={product.productId}
-                                    onChange={(e) => updateProduct(index, 'productId', parseInt(e.target.value))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                    required
-                                    disabled={!product.atelier_concerne}
-                                  >
-                                    <option value="">
-                                      {!product.atelier_concerne 
-                                        ? "Sélectionnez d'abord un atelier" 
-                                        : "Sélectionner un produit"}
-                                    </option>
-                                    {product.atelier_concerne && getFilteredProducts(product.atelier_concerne).map(p => (
-                                      <option key={p.id} value={p.id}>
-                                        {p.name} ({p.estimated_creation_time}h)
-                                      </option>
-                                    ))}
-                                  </select>
-                                  {product.atelier_concerne && getFilteredProducts(product.atelier_concerne).length === 0 && (
-                                    <p className="mt-1 text-sm text-orange-600">
-                                      Aucun produit disponible pour l'atelier "{product.atelier_concerne}"
-                                    </p>
-                                  )}
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Quantité *
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={product.quantity}
-                                    onChange={(e) => updateProduct(index, 'quantity', parseInt(e.target.value) || 1)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                    min="1"
-                                    required
-                                    placeholder="Ex: 1000"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Product-specific fields */}
-                              <div className="border-t border-gray-200 pt-6">
-                                <h6 className="text-sm font-medium text-gray-700 mb-4">Configuration spécifique du produit</h6>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  {visibleFields.productLevel.numero_pms && (
-                                    <Input
-                                      label="Numéro PMS"
-                                      value={product.numero_pms}
-                                      onChange={(e) => updateProduct(index, 'numero_pms', e.target.value)}
-                                      placeholder="Ex: PMS-2024-001"
-                                    />
-                                  )}
-                                  
-                                  {visibleFields.productLevel.infograph_en_charge && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Infographe en charge
-                                      </label>
-                                      <select
-                                        value={product.infograph_en_charge}
-                                        onChange={(e) => updateProduct(index, 'infograph_en_charge', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                      >
-                                        <option value="">Sélectionner un infographe</option>
-                                        {availableUsers
-                                          .filter(user => user.role === 'infograph')
-                                          .map(user => (
-                                            <option key={user.id} value={user.username}>
-                                              {user.username}
-                                            </option>
-                                          ))}
-                                      </select>
+                                  {user?.role === 'atelier' ? (
+                                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                      {getSelectedProductName(index) || 'Non défini'}
                                     </div>
-                                  )}
-                                  
-                                  {visibleFields.productLevel.agent_impression && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Agent d'impression
-                                      </label>
-                                      <select
-                                        value={product.agent_impression}
-                                        onChange={(e) => updateProduct(index, 'agent_impression', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                      >
-                                        <option value="">Sélectionner un agent d'impression</option>
-                                        {availableUsers
-                                          .filter(user => user.role === 'atelier')
-                                          .map(user => (
-                                            <option key={user.id} value={user.username}>
-                                              {user.username}
-                                            </option>
-                                          ))}
-                                      </select>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Date limite estimée is now automatically populated from order's date_limite_livraison_attendue */}
-                                  
-                                  {visibleFields.productLevel.etape && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Étape
-                                        {product.atelier_concerne === 'sous-traitance' && (
-                                          <span className="text-gray-500 text-sm ml-2">(Non applicable pour sous-traitance)</span>
-                                        )}
-                                      </label>
-                                      {product.atelier_concerne === 'sous-traitance' ? (
-                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
-                                          Aucune étape requise
-                                        </div>
-                                      ) : (
-                                        <select
-                                          value={product.etape}
-                                          onChange={(e) => updateProduct(index, 'etape', e.target.value)}
-                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        >
-                                          <option value="">
-                                            {!product.atelier_concerne 
-                                              ? "Sélectionnez d'abord un atelier" 
-                                              : "Sélectionner une étape"}
-                                          </option>
-                                          {getEtapeOptionsForAtelier(product.atelier_concerne).map(option => (
-                                            <option key={option.value} value={option.value}>
-                                              {option.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      )}
-                                      {(product.atelier_concerne === 'petit format' || product.atelier_concerne === 'grand format') && !product.etape && (
-                                        <p className="mt-1 text-sm text-blue-600">
-                                          Étape par défaut: "Pre-press". Vous pouvez changer vers "Impression" ou "Finition" selon l'avancement.
-                                        </p>
-                                      )}
-                                      {product.atelier_concerne === 'service crea' && !product.etape && (
-                                        <p className="mt-1 text-sm text-orange-600">
-                                          Veuillez choisir entre "Conception" et "Travail graphique"
-                                        </p>
-                                      )}
-                                    </div>
-                                  )}
-                                  
-                                  {visibleFields.productLevel.estimated_work_time_minutes && (
-                                    <Input
-                                      label="Temps de travail estimé (min)"
-                                      type="number"
-                                      value={product.estimated_work_time_minutes}
-                                      onChange={(e) => updateProduct(index, 'estimated_work_time_minutes', parseInt(e.target.value) || '')}
-                                      min="0"
-                                      placeholder="Ex: 120"
-                                    />
-                                  )}
-                                  
-                                  {visibleFields.productLevel.bat && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        BAT *
-                                      </label>
-                                      <select
-                                        value={product.bat}
-                                        onChange={(e) => updateProduct(index, 'bat', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        required
-                                      >
-                                        <option value="">Sélectionner</option>
-                                        {batOptions.map(option => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  )}
-                                  
-                                  {visibleFields.productLevel.express && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Express *
-                                      </label>
-                                      <select
-                                        value={product.express}
-                                        onChange={(e) => updateProduct(index, 'express', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        required
-                                      >
-                                        <option value="">Sélectionner</option>
-                                        {expressOptions.map(option => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  )}
-                                  
-                                  {visibleFields.productLevel.pack_fin_annee && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Pack fin d'année *
-                                      </label>
-                                      <select
-                                        value={product.pack_fin_annee}
-                                        onChange={(e) => updateProduct(index, 'pack_fin_annee', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        required
-                                      >
-                                        <option value="">Sélectionner</option>
-                                        <option value="true">Oui</option>
-                                        <option value="false">Non</option>
-                                      </select>
-                                    </div>
-                                  )}
-                                  
-                                  {visibleFields.productLevel.commentaires && (
-                                    <div className="md:col-span-2 lg:col-span-3">
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Commentaires
-                                      </label>
-                                      <textarea
-                                        value={product.commentaires}
-                                        onChange={(e) => updateProduct(index, 'commentaires', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                        rows="3"
-                                        placeholder="Commentaires ou instructions spéciales..."
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                {/* Finitions section */}
-                                {visibleFields.productLevel.finitions && (
-                                  <div className="mt-4 pt-4 border-t border-gray-200">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                      Finitions
-                                    </label>
+                                  ) : (
                                     <div 
                                       className="relative"
                                       ref={(el) => {
                                         if (el) {
-                                          finitionSearchRefs.current[getFinitionSearchKey(index)] = el
+                                          productSearchRefs.current[getProductSearchKey(index)] = el
                                         }
                                       }}
                                     >
                                       <div className="relative">
                                         <input
                                           type="text"
-                                          value={finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || ''}
+                                          value={productSearchStates[getProductSearchKey(index)]?.searchTerm || getSelectedProductName(index)}
                                           onChange={(e) => {
-                                            if (!product.productId) return
-                                            initializeFinitionSearch(index)
-                                            updateFinitionSearch(index, e.target.value)
+                                            if (!product.atelier_concerne) return
+                                            initializeProductSearch(index)
+                                            updateProductSearch(index, e.target.value)
                                           }}
                                           onFocus={() => {
-                                            if (!product.productId) return
-                                            initializeFinitionSearch(index)
-                                            updateFinitionSearch(index, finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || '')
+                                            if (!product.atelier_concerne) return
+                                            initializeProductSearch(index)
+                                            updateProductSearch(index, productSearchStates[getProductSearchKey(index)]?.searchTerm || '')
                                           }}
                                           className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                          placeholder={!product.productId 
-                                            ? "Sélectionnez d'abord un produit" 
-                                            : "Rechercher une finition..."}
-                                          disabled={!product.productId}
+                                          placeholder={!product.atelier_concerne 
+                                            ? "Sélectionnez d'abord un atelier" 
+                                            : "Rechercher un produit..."}
+                                          disabled={!product.atelier_concerne}
+                                          required
                                         />
                                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                           <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1172,26 +1144,24 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                       </div>
                                       
                                       {/* Search Results Dropdown */}
-                                      {finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && 
-                                       finitionSearchStates[getFinitionSearchKey(index)]?.filteredFinitions.length > 0 && (
-                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                          {finitionSearchStates[getFinitionSearchKey(index)].filteredFinitions.map((finition) => (
+                                      {productSearchStates[getProductSearchKey(index)]?.isOpen && 
+                                       productSearchStates[getProductSearchKey(index)]?.filteredProducts.length > 0 && (
+                                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                          {productSearchStates[getProductSearchKey(index)].filteredProducts.map((productObj) => (
                                             <button
-                                              key={finition.id}
+                                              key={productObj.id}
                                               type="button"
-                                              onClick={() => selectFinitionFromSearch(index, finition)}
-                                              className="w-full px-3 py-2 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                              onClick={() => selectProductFromSearch(index, productObj)}
+                                              className="w-full px-3 py-3 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
                                             >
                                               <div className="flex items-center justify-between">
-                                                <span className="font-medium">{finition.name}</span>
-                                                {finition.productFinition?.additional_cost > 0 && (
-                                                  <span className="text-sm text-gray-500">
-                                                    +{finition.productFinition.additional_cost}€
-                                                  </span>
-                                                )}
+                                                <span className="font-medium text-gray-900">{productObj.name}</span>
+                                                <span className="text-sm text-blue-600 font-medium">
+                                                  {productObj.estimated_creation_time}h
+                                                </span>
                                               </div>
-                                              {finition.description && (
-                                                <p className="text-sm text-gray-600 mt-1">{finition.description}</p>
+                                              {productObj.description && (
+                                                <p className="text-sm text-gray-600 mt-1">{productObj.description}</p>
                                               )}
                                             </button>
                                           ))}
@@ -1199,116 +1169,557 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                       )}
                                       
                                       {/* No Results Message */}
-                                      {finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && 
-                                       finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm.length > 0 &&
-                                       finitionSearchStates[getFinitionSearchKey(index)]?.filteredFinitions.length === 0 && (
-                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                                      {productSearchStates[getProductSearchKey(index)]?.isOpen && 
+                                       productSearchStates[getProductSearchKey(index)]?.searchTerm.length > 0 &&
+                                       productSearchStates[getProductSearchKey(index)]?.filteredProducts.length === 0 && (
+                                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3">
                                           <div className="text-center text-gray-500">
                                             <svg className="w-6 h-6 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                             </svg>
-                                            <p className="text-sm">Aucune finition trouvée pour "{finitionSearchStates[getFinitionSearchKey(index)].searchTerm}"</p>
+                                            <p className="text-sm">Aucun produit trouvé pour "{productSearchStates[getProductSearchKey(index)].searchTerm}"</p>
                                           </div>
                                         </div>
                                       )}
+                                      
+                                      {/* Show all products when no search term and atelier selected */}
+                                      {product.atelier_concerne && 
+                                       (!productSearchStates[getProductSearchKey(index)]?.searchTerm || productSearchStates[getProductSearchKey(index)]?.searchTerm === '') &&
+                                       productSearchStates[getProductSearchKey(index)]?.isOpen && (
+                                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                          {getFilteredProducts(product.atelier_concerne).map((productObj) => (
+                                            <button
+                                              key={productObj.id}
+                                              type="button"
+                                              onClick={() => selectProductFromSearch(index, productObj)}
+                                              className="w-full px-3 py-3 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                            >
+                                              <div className="flex items-center justify-between">
+                                                <span className="font-medium text-gray-900">{productObj.name}</span>
+                                                <span className="text-sm text-blue-600 font-medium">
+                                                  {productObj.estimated_creation_time}h
+                                                </span>
+                                              </div>
+                                              {productObj.description && (
+                                                <p className="text-sm text-gray-600 mt-1">{productObj.description}</p>
+                                              )}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
+                                  )}
+                                  {product.atelier_concerne && getFilteredProducts(product.atelier_concerne).length === 0 && user?.role !== 'atelier' && (
+                                    <p className="mt-1 text-sm text-orange-600">
+                                      Aucun produit disponible pour l'atelier "{product.atelier_concerne}"
+                                    </p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Quantité *
+                                  </label>
+                                  {user?.role === 'atelier' ? (
+                                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                      {product.quantity || 'Non définie'}
+                                    </div>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      value={product.quantity}
+                                      onChange={(e) => updateProduct(index, 'quantity', parseInt(e.target.value) || 1)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                      min="1"
+                                      required
+                                      placeholder="Ex: 1000"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Product-specific fields */}
+                              <div className="border-t border-gray-200 pt-6">
+                                <h6 className="text-sm font-medium text-gray-700 mb-4">
+                                  Configuration spécifique du produit
+                                  {user?.role === 'atelier' && (
+                                    <span className="text-orange-600 text-xs ml-2 font-normal">
+                                      (Lecture seule - Seules les finitions sont modifiables)
+                                    </span>
+                                  )}
+                                </h6>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {/* Display read-only fields for atelier users */}
+                                  {user?.role === 'atelier' && (
+                                    <>
+                                      {/* Read-only displays for atelier users */}
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Numéro PMS
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.numero_pms || 'Non défini'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Infographe en charge
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.infograph_en_charge || 'Non assigné'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Agent d'impression
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.agent_impression || 'Non assigné'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Étape
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.etape || 'Non définie'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Atelier concerné
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.atelier_concerne || 'Non défini'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Temps estimé (min)
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.estimated_work_time_minutes || 'Non défini'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          BAT
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.bat || 'Non défini'}
+                                        </div>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Express
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                          {product.express || 'Non défini'}
+                                        </div>
+                                      </div>
+                                      
+                                      {product.atelier_concerne === 'sous-traitance' && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Type de sous-traitance
+                                          </label>
+                                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                            {product.type_sous_traitance || 'Non défini'}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      <div className="md:col-span-2 lg:col-span-3">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          Commentaires
+                                        </label>
+                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 min-h-[6rem]">
+                                          {product.commentaires || 'Aucun commentaire'}
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
+                                  
+                                  {/* Editable fields for non-atelier users */}
+                                  {user?.role !== 'atelier' && (
+                                    <>
+                                      {visibleFields.productLevel.numero_pms && (
+                                        <Input
+                                          label="Numéro PMS"
+                                          value={product.numero_pms}
+                                          onChange={(e) => updateProduct(index, 'numero_pms', e.target.value)}
+                                          placeholder="Ex: PMS-2024-001"
+                                        />
+                                      )}
+                                      
+                                      {visibleFields.productLevel.infograph_en_charge && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Infographe en charge
+                                          </label>
+                                          <select
+                                            value={product.infograph_en_charge}
+                                            onChange={(e) => updateProduct(index, 'infograph_en_charge', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                          >
+                                            <option value="">Sélectionner un infographe</option>
+                                            {availableUsers
+                                              .filter(user => user.role === 'infograph')
+                                              .map(user => (
+                                                <option key={user.id} value={user.username}>
+                                                  {user.username}
+                                                </option>
+                                              ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.agent_impression && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Agent d'impression
+                                          </label>
+                                          <select
+                                            value={product.agent_impression}
+                                            onChange={(e) => updateProduct(index, 'agent_impression', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                          >
+                                            <option value="">Sélectionner un agent d'impression</option>
+                                            {availableUsers
+                                              .filter(user => user.role === 'atelier')
+                                              .map(user => (
+                                                <option key={user.id} value={user.username}>
+                                                  {user.username}
+                                                </option>
+                                              ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {/* Date limite estimée is now automatically populated from order's date_limite_livraison_attendue */}
+                                      
+                                      {visibleFields.productLevel.etape && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Étape
+                                            {product.atelier_concerne === 'sous-traitance' && (
+                                              <span className="text-gray-500 text-sm ml-2">(Non applicable pour sous-traitance)</span>
+                                            )}
+                                          </label>
+                                          {product.atelier_concerne === 'sous-traitance' ? (
+                                            <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                                              Aucune étape requise
+                                            </div>
+                                          ) : (
+                                            <select
+                                              value={product.etape}
+                                              onChange={(e) => updateProduct(index, 'etape', e.target.value)}
+                                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            >
+                                              <option value="">
+                                                {!product.atelier_concerne 
+                                                  ? "Sélectionnez d'abord un atelier" 
+                                                  : "Sélectionner une étape"}
+                                              </option>
+                                              {getEtapeOptionsForAtelier(product.atelier_concerne).map(option => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          )}
+                                          {(product.atelier_concerne === 'petit format' || product.atelier_concerne === 'grand format') && !product.etape && (
+                                            <p className="mt-1 text-sm text-blue-600">
+                                              Étape par défaut: "Pre-press". Vous pouvez changer vers "Impression" ou "Finition" selon l'avancement.
+                                            </p>
+                                          )}
+                                          {product.atelier_concerne === 'service crea' && !product.etape && (
+                                            <p className="mt-1 text-sm text-orange-600">
+                                              Veuillez choisir entre "Conception" et "Travail graphique"
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.estimated_work_time_minutes && (
+                                        <Input
+                                          label="Temps de travail estimé (min)"
+                                          type="number"
+                                          value={product.estimated_work_time_minutes}
+                                          onChange={(e) => updateProduct(index, 'estimated_work_time_minutes', parseInt(e.target.value) || '')}
+                                          min="0"
+                                          placeholder="Ex: 120"
+                                        />
+                                      )}
+                                      
+                                      {visibleFields.productLevel.bat && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            BAT *
+                                          </label>
+                                          <select
+                                            value={product.bat}
+                                            onChange={(e) => updateProduct(index, 'bat', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            required
+                                          >
+                                            <option value="">Sélectionner</option>
+                                            {batOptions.map(option => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.express && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Express *
+                                          </label>
+                                          <select
+                                            value={product.express}
+                                            onChange={(e) => updateProduct(index, 'express', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            required
+                                          >
+                                            <option value="">Sélectionner</option>
+                                            {expressOptions.map(option => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.pack_fin_annee && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Pack fin d'année *
+                                          </label>
+                                          <select
+                                            value={product.pack_fin_annee}
+                                            onChange={(e) => updateProduct(index, 'pack_fin_annee', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            required
+                                          >
+                                            <option value="">Sélectionner</option>
+                                            <option value="true">Oui</option>
+                                            <option value="false">Non</option>
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.type_sous_traitance && product.atelier_concerne === 'sous-traitance' && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Type de sous-traitance
+                                          </label>
+                                          <select
+                                            value={product.type_sous_traitance}
+                                            onChange={(e) => updateProduct(index, 'type_sous_traitance', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            required
+                                          >
+                                            <option value="">Sélectionner le type</option>
+                                            {typeSousTraitanceOptions.map(option => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.commentaires && (
+                                        <div className="md:col-span-2 lg:col-span-3">
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Commentaires
+                                          </label>
+                                          <textarea
+                                            value={product.commentaires}
+                                            onChange={(e) => updateProduct(index, 'commentaires', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            rows="3"
+                                            placeholder="Commentaires ou instructions spéciales..."
+                                          />
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                                
+                                {/* Finitions section */}
+                                {visibleFields.productLevel.finitions && (
+                                  <div className="mt-4 pt-4 border-t border-gray-200">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                      Finitions
+                                      {user?.role === 'atelier' && (
+                                        <span className="text-green-600 text-sm ml-2 font-normal">
+                                          (Section modifiable)
+                                        </span>
+                                      )}
+                                    </label>
+                                    {user?.role !== 'commercial' && (
+                                      <div 
+                                        className="relative"
+                                        ref={(el) => {
+                                          if (el) {
+                                            finitionSearchRefs.current[getFinitionSearchKey(index)] = el
+                                          }
+                                        }}
+                                      >
+                                        <div className="relative">
+                                          <input
+                                            type="text"
+                                            value={finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || ''}
+                                            onChange={(e) => {
+                                              if (!product.productId) return
+                                              initializeFinitionSearch(index)
+                                              updateFinitionSearch(index, e.target.value)
+                                            }}
+                                            onFocus={() => {
+                                              if (!product.productId) return
+                                              initializeFinitionSearch(index)
+                                              updateFinitionSearch(index, finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || '')
+                                            }}
+                                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                            placeholder={!product.productId 
+                                              ? "Sélectionnez d'abord un produit" 
+                                              : "Rechercher une finition..."}
+                                            disabled={!product.productId}
+                                          />
+                                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Search Results Dropdown */}
+                                        {finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && 
+                                         finitionSearchStates[getFinitionSearchKey(index)]?.filteredFinitions.length > 0 && (
+                                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {finitionSearchStates[getFinitionSearchKey(index)].filteredFinitions.map((finition) => (
+                                              <button
+                                                key={finition.id}
+                                                type="button"
+                                                onClick={() => selectFinitionFromSearch(index, finition)}
+                                                className="w-full px-3 py-3 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                              >
+                                                <div className="flex items-center justify-between">
+                                                  <span className="font-medium text-gray-900">{finition.name}</span>
+                                                  {finition.productFinition?.additional_cost > 0 && (
+                                                    <span className="text-sm text-blue-600 font-medium">
+                                                      +{finition.productFinition.additional_cost}€
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {finition.description && (
+                                                  <p className="text-sm text-gray-600 mt-1">{finition.description}</p>
+                                                )}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                        
+                                        {/* No Results Message */}
+                                        {finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && 
+                                         finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm.length > 0 &&
+                                         finitionSearchStates[getFinitionSearchKey(index)]?.filteredFinitions.length === 0 && (
+                                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                                            <div className="text-center text-gray-500">
+                                              <svg className="w-6 h-6 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                              </svg>
+                                              <p className="text-sm">Aucune finition trouvée pour "{finitionSearchStates[getFinitionSearchKey(index)].searchTerm}"</p>
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Show all finitions when no search term and productId selected */}
+                                        {product.productId && 
+                                         (!finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm || finitionSearchStates[getFinitionSearchKey(index)]?.searchTerm === '') &&
+                                         finitionSearchStates[getFinitionSearchKey(index)]?.isOpen && (
+                                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {getAvailableFinitionsForProduct(product.productId)
+                                              .filter(finition => !product.finitions?.some(f => f.finition_id === finition.id))
+                                              .length === 0 ? (
+                                              <div className="p-4 text-center text-gray-500">
+                                                <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                                </svg>
+                                                <p className="text-sm font-medium text-gray-600">Aucune finition disponible</p>
+                                                <p className="text-xs text-gray-500 mt-1">Ce produit n'a pas de finitions configurées</p>
+                                              </div>
+                                            ) : (
+                                              getAvailableFinitionsForProduct(product.productId)
+                                                .filter(finition => !product.finitions?.some(f => f.finition_id === finition.id))
+                                                .map((finition) => (
+                                                <button
+                                                  key={finition.id}
+                                                  type="button"
+                                                  onClick={() => selectFinitionFromSearch(index, finition)}
+                                                  className="w-full px-3 py-3 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                                >
+                                                  <div className="flex items-center justify-between">
+                                                    <span className="font-medium text-gray-900">{finition.name}</span>
+                                                    {finition.productFinition?.additional_cost > 0 && (
+                                                      <span className="text-sm text-blue-600 font-medium">
+                                                        +{finition.productFinition.additional_cost}€
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  {finition.description && (
+                                                    <p className="text-sm text-gray-600 mt-1">{finition.description}</p>
+                                                  )}
+                                                </button>
+                                              ))
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                     {product.finitions && product.finitions.length > 0 && (
                                       <div className="mt-2 space-y-3">
                                         {product.finitions.map((finition) => (
                                           <div key={finition.finition_id} className="bg-green-50 border border-green-200 rounded-lg p-3">
                                             <div className="flex items-center justify-between mb-2">
                                               <span className="text-green-800 font-medium">{finition.finition_name}</span>
-                                              <button
-                                                type="button"
-                                                onClick={() => removeFinitionFromProduct(index, finition.finition_id)}
-                                                className="text-red-500 hover:text-red-700"
-                                              >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                              </button>
+                                              {user?.role !== 'commercial' && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => removeFinitionFromProduct(index, finition.finition_id)}
+                                                  className="text-red-500 hover:text-red-700"
+                                                >
+                                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                  </svg>
+                                                </button>
+                                              )}
                                             </div>
                                             
                                             {/* Assignment and Date Fields */}
                                             {user?.role !== 'commercial' && (
                                               <div className="space-y-4 mt-4">
-                                                {/* Assigned Agents - Beautiful Checklist */}
+                                                {/* Assigned Agents - Searchable Multi-Select */}
                                                 <div>
                                                   <label className="block text-sm font-medium text-gray-700 mb-3">
                                                     Agents assignés
                                                   </label>
-                                                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                                    {availableUsers.filter(user => user.role === 'atelier').length === 0 ? (
-                                                      <div className="text-center py-4 text-gray-500">
-                                                        <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                                                        </svg>
-                                                        <p className="text-sm">Aucun agent d'atelier disponible</p>
-                                                      </div>
-                                                    ) : (
-                                                      <div className="grid grid-cols-1 gap-2">
-                                                        {availableUsers.filter(user => user.role === 'atelier').map(atelierUser => {
-                                                          const isSelected = (finition.assigned_agents || []).includes(atelierUser.id)
-                                                          return (
-                                                            <label
-                                                              key={atelierUser.id}
-                                                              className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
-                                                                isSelected
-                                                                  ? 'bg-blue-50 border-blue-300 shadow-sm'
-                                                                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                                                              }`}
-                                                            >
-                                                              <div className="flex items-center">
-                                                                <input
-                                                                  type="checkbox"
-                                                                  checked={isSelected}
-                                                                  onChange={(e) => {
-                                                                    const currentAgents = finition.assigned_agents || []
-                                                                    let newAgents
-                                                                    if (e.target.checked) {
-                                                                      newAgents = [...currentAgents, atelierUser.id]
-                                                                    } else {
-                                                                      newAgents = currentAgents.filter(id => id !== atelierUser.id)
-                                                                    }
-                                                                    updateFinitionAssignedAgents(index, finition.finition_id, newAgents)
-                                                                  }}
-                                                                  className="sr-only"
-                                                                />
-                                                                <div className={`flex-shrink-0 w-5 h-5 rounded border-2 mr-3 flex items-center justify-center transition-all duration-200 ${
-                                                                  isSelected
-                                                                    ? 'bg-blue-600 border-blue-600'
-                                                                    : 'border-gray-300'
-                                                                }`}>
-                                                                  {isSelected && (
-                                                                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                                    </svg>
-                                                                  )}
-                                                                </div>
-                                                                <div className="flex items-center">
-                                                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium mr-3 ${
-                                                                    isSelected
-                                                                      ? 'bg-blue-100 text-blue-700'
-                                                                      : 'bg-gray-100 text-gray-600'
-                                                                  }`}>
-                                                                    {atelierUser.username.charAt(0).toUpperCase()}
-                                                                  </div>
-                                                                  <div>
-                                                                    <p className={`text-sm font-medium ${
-                                                                      isSelected ? 'text-blue-900' : 'text-gray-900'
-                                                                    }`}>
-                                                                      {atelierUser.username}
-                                                                    </p>
-                                                                    <p className="text-xs text-gray-500">Agent d'atelier</p>
-                                                                  </div>
-                                                                </div>
-                                                              </div>
-                                                            </label>
-                                                          )
-                                                        })}
-                                                      </div>
-                                                    )}
-                                                  </div>
+                                                  <AgentSelector
+                                                    availableUsers={availableUsers.filter(user => user.role === 'atelier')}
+                                                    selectedAgents={finition.assigned_agents || []}
+                                                    onAgentsChange={(agents) => updateFinitionAssignedAgents(index, finition.finition_id, agents)}
+                                                  />
                                                 </div>
                                                 
                                                 {/* Date Fields */}
@@ -1326,17 +1737,47 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                                     />
                                                   </div>
                                                   
-                                                  {/* End Date */}
+                                                  {/* End Date / Terminé Button */}
                                                   <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">Date fin</label>
-                                                    <input
-                                                      type="datetime-local"
-                                                      value={finition.end_date || ''}
-                                                      onChange={(e) => {
-                                                        updateFinitionDates(index, finition.finition_id, finition.start_date, e.target.value)
-                                                      }}
-                                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
-                                                    />
+                                                    {finition.end_date ? (
+                                                      <div className="flex items-center gap-2">
+                                                        <input
+                                                          type="datetime-local"
+                                                          value={finition.end_date}
+                                                          onChange={(e) => {
+                                                            updateFinitionDates(index, finition.finition_id, finition.start_date, e.target.value)
+                                                          }}
+                                                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                                                        />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            updateFinitionDates(index, finition.finition_id, finition.start_date, '')
+                                                          }}
+                                                          className="px-3 py-2 text-gray-500 hover:text-red-600 transition-colors duration-200"
+                                                          title="Réinitialiser"
+                                                        >
+                                                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                          </svg>
+                                                        </button>
+                                                      </div>
+                                                    ) : (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const now = new Date().toISOString().slice(0, 16)
+                                                          updateFinitionDates(index, finition.finition_id, finition.start_date, now)
+                                                        }}
+                                                        className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center gap-2 font-medium"
+                                                      >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        Marquer comme terminé
+                                                      </button>
+                                                    )}
                                                   </div>
                                                 </div>
                                               </div>

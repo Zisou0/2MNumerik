@@ -24,14 +24,24 @@ module.exports = (sequelize) => {
       },
       comment: 'Estimated creation time in minutes'
     },
-    atelier_type: {
-      type: DataTypes.ENUM('petit_format', 'grand_format', 'sous_traitance', 'service_crea'),
+    atelier_types: {
+      type: DataTypes.JSON,
       allowNull: true,
       defaultValue: null,
       validate: {
-        isIn: [['petit_format', 'grand_format', 'sous_traitance', 'service_crea']]
+        isValidAtelierTypes(value) {
+          if (value === null || value === undefined) return;
+          if (!Array.isArray(value)) {
+            throw new Error('atelier_types must be an array');
+          }
+          const validTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea'];
+          const invalidTypes = value.filter(type => !validTypes.includes(type));
+          if (invalidTypes.length > 0) {
+            throw new Error(`Invalid atelier types: ${invalidTypes.join(', ')}`);
+          }
+        }
       },
-      comment: 'Type d\'atelier assigné au produit'
+      comment: 'Array of atelier types assigned to the product'
     }
   }, {
     tableName: 'products',

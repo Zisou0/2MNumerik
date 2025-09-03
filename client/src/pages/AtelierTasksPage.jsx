@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { atelierTaskAPI, orderAPI, userAPI } from '../utils/api';
 import Button from '../components/ButtonComponent';
 import AlertDialog from '../components/AlertDialog';
+import { useAuth } from '../contexts/AuthContext';
+import UserSelector from '../components/UserSelector';
 
 const AtelierTasksPage = () => {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -13,16 +17,13 @@ const AtelierTasksPage = () => {
   const [stats, setStats] = useState({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
-  const [orders, setOrders] = useState([]);
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [taskToComplete, setTaskToComplete] = useState(null);
   const [atelierUsers, setAtelierUsers] = useState([]);
   const [filters, setFilters] = useState({
     search: '',
     status: '',
-    priority: '',
-    atelier_type: '',
-    assigned_to: '',
-    due_date_from: '',
-    due_date_to: ''
+    atelier_type: ''
   });
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -32,9 +33,7 @@ const AtelierTasksPage = () => {
 
   const statusOptions = [
     { value: 'pending', label: 'En attente', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'in_progress', label: 'En cours', color: 'bg-blue-100 text-blue-800' },
-    { value: 'completed', label: 'Terminé', color: 'bg-green-100 text-green-800' },
-    { value: 'cancelled', label: 'Annulé', color: 'bg-red-100 text-red-800' }
+    { value: 'in_progress', label: 'En cours', color: 'bg-blue-100 text-blue-800' }
   ];
 
   const priorityOptions = [
@@ -45,16 +44,24 @@ const AtelierTasksPage = () => {
   ];
 
   const atelierTypeOptions = [
-    { value: 'petit_format', label: 'Petit format' },
-    { value: 'grand_format', label: 'Grand format' },
-    { value: 'sous_traitance', label: 'Sous-traitance' },
-    { value: 'general', label: 'Général' }
+    { value: 'type_extern', label: 'Type Extern' },
+    { value: 'type_intern', label: 'Type Intern' }
   ];
 
   const fetchTasks = async (page = 1) => {
     try {
       setLoading(true);
-      const params = { page, limit: 10, ...filters };
+      const params = { 
+        page, 
+        limit: 10, 
+        ...filters
+      };
+      
+      // Only exclude completed and cancelled tasks if no specific status filter is applied
+      if (!filters.status) {
+        params.exclude_status = 'completed,cancelled';
+      }
+      
       Object.keys(params).forEach(key => params[key] === '' && delete params[key]);
       
       const response = await atelierTaskAPI.getTasks(params);
@@ -76,15 +83,6 @@ const AtelierTasksPage = () => {
     }
   };
 
-  const fetchOrders = async () => {
-    try {
-      const response = await orderAPI.getOrders({ limit: 100 });
-      setOrders(response.orders || []);
-    } catch (err) {
-      console.error('Erreur lors du chargement des commandes:', err);
-    }
-  };
-
   const fetchAtelierUsers = async () => {
     try {
       const response = await userAPI.getUsers({ role: 'atelier' });
@@ -97,7 +95,6 @@ const AtelierTasksPage = () => {
   useEffect(() => {
     fetchTasks();
     fetchStats();
-    fetchOrders();
     fetchAtelierUsers();
   }, [filters]);
 
@@ -147,6 +144,48 @@ const AtelierTasksPage = () => {
     }
   };
 
+  const handleStartTask = async (taskId) => {
+    try {
+      await atelierTaskAPI.updateTask(taskId, { 
+        started_at: new Date().toISOString(),
+        status: 'in_progress'
+      });
+      fetchTasks(pagination.currentPage);
+      fetchStats();
+    } catch (err) {
+      setError('Erreur lors du démarrage de la tâche');
+    }
+  };
+
+  const handleEndTask = async (taskId) => {
+    setTaskToComplete(taskId);
+    setShowCompleteDialog(true);
+  };
+
+  const confirmCompleteTask = async () => {
+    if (taskToComplete) {
+      try {
+        await atelierTaskAPI.updateTask(taskToComplete, { 
+          completed_at: new Date().toISOString(),
+          status: 'completed'
+        });
+        fetchTasks(pagination.currentPage);
+        fetchStats();
+        setShowCompleteDialog(false);
+        setTaskToComplete(null);
+      } catch (err) {
+        setError('Erreur lors de la finalisation de la tâche');
+        setShowCompleteDialog(false);
+        setTaskToComplete(null);
+      }
+    }
+  };
+
+  const cancelCompleteTask = () => {
+    setShowCompleteDialog(false);
+    setTaskToComplete(null);
+  };
+
   const getStatusLabel = (status) => {
     const option = statusOptions.find(opt => opt.value === status);
     return option ? option.label : status;
@@ -154,16 +193,6 @@ const AtelierTasksPage = () => {
 
   const getStatusColor = (status) => {
     const option = statusOptions.find(opt => opt.value === status);
-    return option ? option.color : 'bg-gray-100 text-gray-800';
-  };
-
-  const getPriorityLabel = (priority) => {
-    const option = priorityOptions.find(opt => opt.value === priority);
-    return option ? option.label : priority;
-  };
-
-  const getPriorityColor = (priority) => {
-    const option = priorityOptions.find(opt => opt.value === priority);
     return option ? option.color : 'bg-gray-100 text-gray-800';
   };
 
@@ -183,16 +212,9 @@ const AtelierTasksPage = () => {
     });
   };
 
-  const formatDuration = (minutes) => {
-    if (!minutes) return '-';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
-  };
-
   const isOverdue = (dueDate, status) => {
-    if (!dueDate || status === 'completed') return false;
-    return new Date(dueDate) < new Date();
+    // No longer using due dates, so always return false
+    return false;
   };
 
   if (loading && tasks.length === 0) {
@@ -209,7 +231,7 @@ const AtelierTasksPage = () => {
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Gestion des tâches d'atelier</h1>
         
         {/* Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="text-2xl font-bold text-blue-600">{stats.total || 0}</div>
             <div className="text-sm text-gray-600">Total</div>
@@ -229,14 +251,6 @@ const AtelierTasksPage = () => {
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="text-2xl font-bold text-red-600">{stats.cancelled || 0}</div>
             <div className="text-sm text-gray-600">Annulé</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-red-600">{stats.urgent || 0}</div>
-            <div className="text-sm text-gray-600">Urgent</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-orange-600">{stats.high_priority || 0}</div>
-            <div className="text-sm text-gray-600">Priorité élevée</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="text-2xl font-bold text-red-600">{stats.overdue || 0}</div>
@@ -268,67 +282,23 @@ const AtelierTasksPage = () => {
               </select>
 
               <select
-                value={filters.priority}
-                onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
-              >
-                <option value="">Toutes les priorités</option>
-                {priorityOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-
-              <select
                 value={filters.atelier_type}
                 onChange={(e) => setFilters({ ...filters, atelier_type: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
               >
-                <option value="">Tous les types</option>
+                <option value="">Tous les types de tâche</option>
                 {atelierTypeOptions.map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
 
-              <select
-                value={filters.assigned_to}
-                onChange={(e) => setFilters({ ...filters, assigned_to: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
-              >
-                <option value="">Tous les assignés</option>
-                {atelierUsers.map(user => (
-                  <option key={user.id} value={user.username}>
-                    {user.username}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="date"
-                placeholder="Échéance de"
-                value={filters.due_date_from}
-                onChange={(e) => setFilters({ ...filters, due_date_from: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
-              />
-
-              <input
-                type="date"
-                placeholder="Échéance à"
-                value={filters.due_date_to}
-                onChange={(e) => setFilters({ ...filters, due_date_to: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
-              />
-
               {/* Clear Filters Button */}
-              {(filters.search || filters.status || filters.priority || filters.atelier_type || filters.assigned_to || filters.due_date_from || filters.due_date_to) && (
+              {(filters.search || filters.status || filters.atelier_type) && (
                 <button
                   onClick={() => setFilters({
                     search: '',
                     status: '',
-                    priority: '',
-                    atelier_type: '',
-                    assigned_to: '',
-                    due_date_from: '',
-                    due_date_to: ''
+                    atelier_type: ''
                   })}
                   className="text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors duration-200"
                 >
@@ -337,6 +307,16 @@ const AtelierTasksPage = () => {
               )}
             </div>
             <div className="flex flex-wrap gap-3 lg:flex-shrink-0">
+              {(user?.role === 'admin' || user?.role === 'atelier') && (
+                <Link to="/history-atelier-tasks">
+                  <Button variant="secondary">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Historique
+                  </Button>
+                </Link>
+              )}
               <Button onClick={handleCreateTask}>
                 Nouvelle tâche
               </Button>
@@ -364,19 +344,16 @@ const AtelierTasksPage = () => {
                     Assigné à
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priorité
+                    Date début
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date fin
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Statut
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Échéance
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Durée
+                    Type de tâche
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -386,57 +363,75 @@ const AtelierTasksPage = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {tasks.map((task) => (
                   <tr key={task.id} className={isOverdue(task.due_date, task.status) ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-1">
                       <div>
                         <div className="text-sm font-medium text-gray-900">{task.title}</div>
                         {task.description && (
                           <div className="text-sm text-gray-500 truncate max-w-xs">{task.description}</div>
                         )}
-                        {task.order && (
-                          <div className="text-xs text-blue-600">
-                            Commande: {task.order.numero_pms}
-                          </div>
-                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {task.assigned_to || '-'}
+                    <td className="px-6 py-1 whitespace-nowrap text-sm text-gray-900">
+                      {Array.isArray(task.assigned_to) && task.assigned_to.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {task.assigned_to.map((username, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                            >
+                              {username}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(task.priority)}`}>
-                        {getPriorityLabel(task.priority)}
+                    <td className="px-6 py-1 whitespace-nowrap text-sm">
+                      {task.started_at ? (
+                        <span className="text-green-600 font-medium">
+                          {formatDate(task.started_at)}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleStartTask(task.id)}
+                          className="inline-flex items-center gap-1 text-green-600 hover:text-green-900 bg-green-100 hover:bg-green-200 px-3 py-1 rounded-lg transition-all duration-200 text-sm font-medium"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6-8h1m4 0h1M9 6h6" />
+                          </svg>
+                          Démarrer
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-6 py-1 whitespace-nowrap text-sm">
+                      {task.completed_at ? (
+                        <span className="text-blue-600 font-medium">
+                          {formatDate(task.completed_at)}
+                        </span>
+                      ) : task.started_at ? (
+                        <button
+                          onClick={() => handleEndTask(task.id)}
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-lg transition-all duration-200 text-sm font-medium"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Terminer
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-1 whitespace-nowrap">
+                      <span className={`text-xs font-semibold rounded-full px-2 py-1 ${getStatusColor(task.status)}`}>
+                        {getStatusLabel(task.status)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <select
-                        value={task.status}
-                        onChange={(e) => handleStatusUpdate(task.id, e.target.value)}
-                        className={`text-xs font-semibold rounded-full px-2 py-1 border-0 ${getStatusColor(task.status)}`}
-                      >
-                        {statusOptions.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-1 whitespace-nowrap text-sm text-gray-900">
                       {getAtelierTypeLabel(task.atelier_type)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className={isOverdue(task.due_date, task.status) ? 'text-red-600 font-semibold' : ''}>
-                        {formatDate(task.due_date)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div>
-                        <div>Est: {formatDuration(task.estimated_duration_minutes)}</div>
-                        {task.actual_duration_minutes && (
-                          <div className="text-xs text-gray-500">
-                            Réel: {formatDuration(task.actual_duration_minutes)}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                    <td className="px-6 py-1 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
                         onClick={() => handleEditTask(task)}
                         className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900 bg-indigo-100 hover:bg-indigo-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
@@ -528,6 +523,20 @@ const AtelierTasksPage = () => {
         />
       )}
 
+      {/* Complete Task Confirmation Dialog */}
+      {showCompleteDialog && (
+        <AlertDialog
+          isOpen={showCompleteDialog}
+          onClose={cancelCompleteTask}
+          onConfirm={confirmCompleteTask}
+          title="Terminer la tâche"
+          message="Êtes-vous sûr de vouloir marquer cette tâche comme terminée ? Elle sera déplacée vers l'historique."
+          confirmText="Confirmer"
+          cancelText="Annuler"
+          type="success"
+        />
+      )}
+
       {/* Create/Edit Modal */}
       {(showCreateModal || showEditModal) && (
         <TaskModal
@@ -538,7 +547,6 @@ const AtelierTasksPage = () => {
             setSelectedTask(null);
           }}
           task={selectedTask}
-          orders={orders}
           atelierUsers={atelierUsers}
           onSave={() => {
             fetchTasks(pagination.currentPage);
@@ -548,7 +556,6 @@ const AtelierTasksPage = () => {
             setSelectedTask(null);
           }}
           statusOptions={statusOptions}
-          priorityOptions={priorityOptions}
           atelierTypeOptions={atelierTypeOptions}
         />
       )}
@@ -557,18 +564,15 @@ const AtelierTasksPage = () => {
 };
 
 // Task Modal Component
-const TaskModal = ({ isOpen, onClose, task, orders, atelierUsers, onSave, statusOptions, priorityOptions, atelierTypeOptions }) => {
+const TaskModal = ({ isOpen, onClose, task, atelierUsers, onSave, statusOptions, atelierTypeOptions }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    assigned_to: '',
-    priority: 'medium',
+    assigned_to: [],
     status: 'pending',
-    atelier_type: 'general',
-    estimated_duration_minutes: '',
-    actual_duration_minutes: '',
-    due_date: '',
-    order_id: '',
+    atelier_type: 'type_extern',
+    start_date: '',
+    end_date: '',
     notes: ''
   });
   const [saving, setSaving] = useState(false);
@@ -579,34 +583,27 @@ const TaskModal = ({ isOpen, onClose, task, orders, atelierUsers, onSave, status
       setFormData({
         title: task.title || '',
         description: task.description || '',
-        assigned_to: task.assigned_to || '',
-        priority: task.priority || 'medium',
+        assigned_to: Array.isArray(task.assigned_to) ? task.assigned_to : (task.assigned_to ? [task.assigned_to] : []),
         status: task.status || 'pending',
-        atelier_type: task.atelier_type || 'general',
-        estimated_duration_minutes: task.estimated_duration_minutes || '',
-        actual_duration_minutes: task.actual_duration_minutes || '',
-        due_date: task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '',
-        order_id: task.order_id || '',
+        atelier_type: task.atelier_type || 'type_extern',
+        start_date: task.started_at ? new Date(task.started_at).toISOString().slice(0, 16) : '',
+        end_date: task.completed_at ? new Date(task.completed_at).toISOString().slice(0, 16) : '',
         notes: task.notes || ''
       });
     } else {
+      // For new tasks, always default to 'pending' status (which displays as "En attente")
       setFormData({
         title: '',
         description: '',
-        assigned_to: '',
-        priority: 'medium',
-        status: 'pending',
-        atelier_type: 'general',
-        estimated_duration_minutes: '',
-        actual_duration_minutes: '',
-        due_date: '',
-        order_id: '',
+        assigned_to: [],
+        status: 'pending', // Default status for new tasks
+        atelier_type: 'type_extern',
+        start_date: '',
+        end_date: '',
         notes: ''
       });
     }
-  }, [task]);
-
-  const handleSubmit = async (e) => {
+  }, [task]);  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title) {
       setError('Le titre est requis');
@@ -619,10 +616,8 @@ const TaskModal = ({ isOpen, onClose, task, orders, atelierUsers, onSave, status
     try {
       const submitData = {
         ...formData,
-        estimated_duration_minutes: formData.estimated_duration_minutes ? parseInt(formData.estimated_duration_minutes) : null,
-        actual_duration_minutes: formData.actual_duration_minutes ? parseInt(formData.actual_duration_minutes) : null,
-        order_id: formData.order_id || null,
-        due_date: formData.due_date || null
+        start_date: formData.start_date || null,
+        end_date: formData.end_date || null
       };
 
       if (task) {
@@ -687,53 +682,27 @@ const TaskModal = ({ isOpen, onClose, task, orders, atelierUsers, onSave, status
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Assigné à
               </label>
-              <select
-                value={formData.assigned_to}
-                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sélectionner un utilisateur</option>
-                {atelierUsers.map(user => (
-                  <option key={user.id} value={user.username}>
-                    {user.username}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priorité
-              </label>
-              <select
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {priorityOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+              <UserSelector
+                selectedUsers={formData.assigned_to}
+                onChange={(users) => setFormData({ ...formData, assigned_to: users })}
+                users={atelierUsers.map(user => user.username)}
+                placeholder="Sélectionner des utilisateurs..."
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Statut
               </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {statusOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+              <div className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-600">
+                {statusOptions.find(opt => opt.value === formData.status)?.label || formData.status}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Le statut est géré automatiquement par les boutons d'action</p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Type d'atelier
+                Type de tâche
               </label>
               <select
                 value={formData.atelier_type}
@@ -748,58 +717,28 @@ const TaskModal = ({ isOpen, onClose, task, orders, atelierUsers, onSave, status
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Durée estimée (minutes)
-              </label>
-              <input
-                type="number"
-                value={formData.estimated_duration_minutes}
-                onChange={(e) => setFormData({ ...formData, estimated_duration_minutes: e.target.value })}
-                min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Durée réelle (minutes)
-              </label>
-              <input
-                type="number"
-                value={formData.actual_duration_minutes}
-                onChange={(e) => setFormData({ ...formData, actual_duration_minutes: e.target.value })}
-                min="0"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date d'échéance
+                Date de début
               </label>
               <input
                 type="datetime-local"
-                value={formData.due_date}
-                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                value={formData.start_date}
+                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <p className="text-xs text-gray-500 mt-1">Sélectionnez la date et l'heure de début de la tâche</p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Commande associée
+                Date de fin
               </label>
-              <select
-                value={formData.order_id}
-                onChange={(e) => setFormData({ ...formData, order_id: e.target.value })}
+              <input
+                type="datetime-local"
+                value={formData.end_date}
+                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Aucune commande</option>
-                {orders.map(order => (
-                  <option key={order.id} value={order.id}>
-                    {order.numero_pms} - {order.client}
-                  </option>
-                ))}
-              </select>
+              />
+              <p className="text-xs text-gray-500 mt-1">Sélectionnez la date et l'heure de fin de la tâche</p>
             </div>
 
             <div className="md:col-span-2">

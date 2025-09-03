@@ -1,4 +1,4 @@
-const { AtelierTask, Order, User } = require('../models');
+const { AtelierTask, User } = require('../models');
 const { Op } = require('sequelize');
 
 class AtelierTaskController {
@@ -9,24 +9,33 @@ class AtelierTaskController {
         page = 1,
         limit = 10,
         status,
-        priority,
+        exclude_status,
         atelier_type,
-        assigned_to,
         search,
-        order_id,
-        due_date_from,
-        due_date_to
+        assigned_to
       } = req.query;
 
       const offset = (page - 1) * limit;
       const where = {};
 
       // Apply filters
-      if (status) where.status = status;
-      if (priority) where.priority = priority;
+      if (status) {
+        // Support comma-separated statuses
+        const statuses = status.split(',');
+        where.status = { [Op.in]: statuses };
+      }
+
+      // Exclude specific statuses (for main view to exclude completed/cancelled)
+      if (exclude_status) {
+        const excludeStatuses = exclude_status.split(',');
+        where.status = { [Op.notIn]: excludeStatuses };
+      }
+
       if (atelier_type) where.atelier_type = atelier_type;
-      if (assigned_to) where.assigned_to = { [Op.like]: `%${assigned_to}%` };
-      if (order_id) where.order_id = order_id;
+      if (assigned_to) {
+        // Search in JSON array for assigned users
+        where.assigned_to = { [Op.like]: `%"${assigned_to}"%` };
+      }
 
       // Search in title and description
       if (search) {
@@ -37,21 +46,9 @@ class AtelierTaskController {
         ];
       }
 
-      // Date range filter
-      if (due_date_from || due_date_to) {
-        where.due_date = {};
-        if (due_date_from) where.due_date[Op.gte] = new Date(due_date_from);
-        if (due_date_to) where.due_date[Op.lte] = new Date(due_date_to);
-      }
-
       const { count, rows: tasks } = await AtelierTask.findAndCountAll({
         where,
         include: [
-          {
-            model: Order,
-            as: 'order',
-            attributes: ['id', 'client']
-          },
           {
             model: User,
             as: 'creator',
@@ -59,9 +56,7 @@ class AtelierTaskController {
           }
         ],
         order: [
-          ['priority', 'DESC'], // Urgent tasks first
-          ['due_date', 'ASC'],  // Then by due date
-          ['createdAt', 'DESC'] // Finally by creation date
+          ['createdAt', 'DESC'] // Order by creation date
         ],
         limit: parseInt(limit),
         offset: parseInt(offset)
@@ -90,11 +85,6 @@ class AtelierTaskController {
       const task = await AtelierTask.findByPk(id, {
         include: [
           {
-            model: Order,
-            as: 'order',
-            attributes: ['id', 'client']
-          },
-          {
             model: User,
             as: 'creator',
             attributes: ['id', 'username', 'email']
@@ -120,12 +110,10 @@ class AtelierTaskController {
         title,
         description,
         assigned_to,
-        priority = 'medium',
         status = 'pending',
-        atelier_type = 'general',
-        estimated_duration_minutes,
-        due_date,
-        order_id,
+        atelier_type = 'type_extern',
+        start_date,
+        end_date,
         notes
       } = req.body;
 
@@ -133,16 +121,24 @@ class AtelierTaskController {
         return res.status(400).json({ message: 'Le titre est requis' });
       }
 
+      // Ensure assigned_to is properly formatted as array
+      let assignedUsers = [];
+      if (assigned_to) {
+        if (Array.isArray(assigned_to)) {
+          assignedUsers = assigned_to.filter(user => user && user.trim());
+        } else if (typeof assigned_to === 'string' && assigned_to.trim()) {
+          assignedUsers = [assigned_to.trim()];
+        }
+      }
+
       const task = await AtelierTask.create({
         title,
         description,
-        assigned_to,
-        priority,
+        assigned_to: assignedUsers,
         status,
         atelier_type,
-        estimated_duration_minutes,
-        due_date: due_date ? new Date(due_date) : null,
-        order_id: order_id || null,
+        started_at: start_date ? new Date(start_date) : null,
+        completed_at: end_date ? new Date(end_date) : null,
         created_by: req.user ? req.user.id : null,
         notes
       });
@@ -151,17 +147,18 @@ class AtelierTaskController {
       const createdTask = await AtelierTask.findByPk(task.id, {
         include: [
           {
-            model: Order,
-            as: 'order',
-            attributes: ['id', 'client']
-          },
-          {
             model: User,
             as: 'creator',
             attributes: ['id', 'username', 'email']
           }
         ]
       });
+
+      // Emit real-time event for task creation
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('atelierTaskCreated', createdTask);
+      }
 
       res.status(201).json(createdTask);
     } catch (error) {
@@ -178,13 +175,10 @@ class AtelierTaskController {
         title,
         description,
         assigned_to,
-        priority,
         status,
         atelier_type,
-        estimated_duration_minutes,
-        actual_duration_minutes,
-        due_date,
-        order_id,
+        start_date,
+        end_date,
         notes
       } = req.body;
 
@@ -194,17 +188,26 @@ class AtelierTaskController {
         return res.status(404).json({ message: 'Tâche non trouvée' });
       }
 
+      // Handle assigned_to formatting
+      let assignedUsers = task.assigned_to;
+      if (assigned_to !== undefined) {
+        if (Array.isArray(assigned_to)) {
+          assignedUsers = assigned_to.filter(user => user && user.trim());
+        } else if (typeof assigned_to === 'string' && assigned_to.trim()) {
+          assignedUsers = [assigned_to.trim()];
+        } else if (assigned_to === null || assigned_to === '') {
+          assignedUsers = [];
+        }
+      }
+
       await task.update({
         title: title !== undefined ? title : task.title,
         description: description !== undefined ? description : task.description,
-        assigned_to: assigned_to !== undefined ? assigned_to : task.assigned_to,
-        priority: priority !== undefined ? priority : task.priority,
+        assigned_to: assignedUsers,
         status: status !== undefined ? status : task.status,
         atelier_type: atelier_type !== undefined ? atelier_type : task.atelier_type,
-        estimated_duration_minutes: estimated_duration_minutes !== undefined ? estimated_duration_minutes : task.estimated_duration_minutes,
-        actual_duration_minutes: actual_duration_minutes !== undefined ? actual_duration_minutes : task.actual_duration_minutes,
-        due_date: due_date !== undefined ? (due_date ? new Date(due_date) : null) : task.due_date,
-        order_id: order_id !== undefined ? order_id : task.order_id,
+        started_at: start_date !== undefined ? (start_date ? new Date(start_date) : null) : task.started_at,
+        completed_at: end_date !== undefined ? (end_date ? new Date(end_date) : null) : task.completed_at,
         notes: notes !== undefined ? notes : task.notes
       });
 
@@ -212,17 +215,18 @@ class AtelierTaskController {
       const updatedTask = await AtelierTask.findByPk(id, {
         include: [
           {
-            model: Order,
-            as: 'order',
-            attributes: ['id', 'client']
-          },
-          {
             model: User,
             as: 'creator',
             attributes: ['id', 'username', 'email']
           }
         ]
       });
+
+      // Emit real-time event for task update
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('atelierTaskUpdated', updatedTask);
+      }
 
       res.json(updatedTask);
     } catch (error) {
@@ -244,6 +248,12 @@ class AtelierTaskController {
 
       await task.destroy();
 
+      // Emit real-time event for task deletion
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('atelierTaskDeleted', { id: task.id });
+      }
+
       res.json({ message: 'Tâche supprimée avec succès' });
     } catch (error) {
       console.error('Delete task error:', error);
@@ -254,42 +264,64 @@ class AtelierTaskController {
   // Get task statistics
   static async getTaskStats(req, res) {
     try {
-      const { atelier_type } = req.query;
-      const where = atelier_type ? { atelier_type } : {};
+      const { atelier_type, status } = req.query;
+      const baseWhere = atelier_type ? { atelier_type } : {};
 
-      const stats = await Promise.all([
-        AtelierTask.count({ where: { ...where } }),
-        AtelierTask.count({ where: { ...where, status: 'pending' } }),
-        AtelierTask.count({ where: { ...where, status: 'in_progress' } }),
-        AtelierTask.count({ where: { ...where, status: 'completed' } }),
-        AtelierTask.count({ where: { ...where, status: 'cancelled' } }),
-        AtelierTask.count({ where: { ...where, priority: 'urgent' } }),
-        AtelierTask.count({ where: { ...where, priority: 'high' } }),
-        AtelierTask.count({
-          where: {
-            ...where,
-            due_date: {
-              [Op.lt]: new Date()
-            },
-            status: {
-              [Op.not]: 'completed'
-            }
+      // If status filter is provided, only count those statuses
+      if (status) {
+        const statuses = status.split(',');
+        const where = { ...baseWhere, status: { [Op.in]: statuses } };
+        
+        const stats = await Promise.all([
+          AtelierTask.count({ where }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'pending' } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'in_progress' } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'completed' } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'cancelled' } })
+        ]);
+
+        res.json({
+          stats: {
+            total: stats[0],
+            pending: stats[1],
+            in_progress: stats[2],
+            completed: stats[3],
+            cancelled: stats[4],
+            overdue: 0 // Not applicable for history
           }
-        })
-      ]);
+        });
+      } else {
+        // Regular stats for all tasks
+        const stats = await Promise.all([
+          AtelierTask.count({ where: { ...baseWhere } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'pending' } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'in_progress' } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'completed' } }),
+          AtelierTask.count({ where: { ...baseWhere, status: 'cancelled' } }),
+          AtelierTask.count({
+            where: {
+              ...baseWhere,
+              due_date: {
+                [Op.lt]: new Date()
+              },
+              status: {
+                [Op.not]: 'completed'
+              }
+            }
+          })
+        ]);
 
-      res.json({
-        stats: {
-          total: stats[0],
-          pending: stats[1],
-          in_progress: stats[2],
-          completed: stats[3],
-          cancelled: stats[4],
-          urgent: stats[5],
-          high_priority: stats[6],
-          overdue: stats[7]
-        }
-      });
+        res.json({
+          stats: {
+            total: stats[0],
+            pending: stats[1],
+            in_progress: stats[2],
+            completed: stats[3],
+            cancelled: stats[4],
+            overdue: stats[5]
+          }
+        });
+      }
     } catch (error) {
       console.error('Get task stats error:', error);
       res.status(500).json({ message: 'Erreur serveur' });
@@ -307,16 +339,7 @@ class AtelierTaskController {
 
       const tasks = await AtelierTask.findAll({
         where,
-        include: [
-          {
-            model: Order,
-            as: 'order',
-            attributes: ['id', 'client']
-          }
-        ],
         order: [
-          ['priority', 'DESC'],
-          ['due_date', 'ASC'],
           ['createdAt', 'DESC']
         ]
       });
@@ -332,7 +355,7 @@ class AtelierTaskController {
   static async updateTaskStatus(req, res) {
     try {
       const { id } = req.params;
-      const { status, actual_duration_minutes } = req.body;
+      const { status } = req.body;
 
       const task = await AtelierTask.findByPk(id);
 
@@ -340,22 +363,10 @@ class AtelierTaskController {
         return res.status(404).json({ message: 'Tâche non trouvée' });
       }
 
-      const updateData = { status };
-      
-      // Add actual duration if provided
-      if (actual_duration_minutes !== undefined) {
-        updateData.actual_duration_minutes = actual_duration_minutes;
-      }
-
-      await task.update(updateData);
+      await task.update({ status });
 
       const updatedTask = await AtelierTask.findByPk(id, {
         include: [
-          {
-            model: Order,
-            as: 'order',
-            attributes: ['id', 'client']
-          },
           {
             model: User,
             as: 'creator',
@@ -363,6 +374,12 @@ class AtelierTaskController {
           }
         ]
       });
+
+      // Emit real-time event for task status update
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('atelierTaskUpdated', updatedTask);
+      }
 
       res.json(updatedTask);
     } catch (error) {

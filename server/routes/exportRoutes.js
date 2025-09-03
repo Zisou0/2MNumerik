@@ -13,6 +13,9 @@ router.get('/dashboard', ExportController.exportDashboardTable);
 // Export tasks table route
 router.get('/tasks', ExportController.exportTasksTable);
 
+// Export finitions table route
+router.get('/finitions', ExportController.exportFinitionsTable);
+
 // Export database route (admin only - handled in controller)
 router.get('/database', ExportController.exportDatabase);
 

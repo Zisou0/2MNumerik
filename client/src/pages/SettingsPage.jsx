@@ -6,6 +6,7 @@ function SettingsPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [isExportingDashboard, setIsExportingDashboard] = useState(false)
   const [isExportingTasks, setIsExportingTasks] = useState(false)
+  const [isExportingFinitions, setIsExportingFinitions] = useState(false)
   const [isExportingSQL, setIsExportingSQL] = useState(false)
   const { addNotification } = useNotifications()
 
@@ -134,6 +135,47 @@ function SettingsPage() {
     }
   }
 
+  const handleExportFinitionsTable = async () => {
+    setIsExportingFinitions(true)
+    
+    try {
+      const blob = await exportAPI.exportFinitionsTable()
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Generate filename with current date
+      const currentDate = new Date().toISOString().split('T')[0]
+      link.download = `finitions_export_${currentDate}.xlsx`
+      
+      // Trigger download
+      document.body.appendChild(link)
+      link.click()
+      
+      // Cleanup
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      addNotification({
+        type: 'success',
+        title: 'Export réussi',
+        message: 'Les finitions ont été exportées avec succès'
+      })
+      
+    } catch (error) {
+      console.error('Finitions export error:', error)
+      addNotification({
+        type: 'error',
+        title: 'Erreur d\'export',
+        message: error.message || 'Erreur lors de l\'export des finitions'
+      })
+    } finally {
+      setIsExportingFinitions(false)
+    }
+  }
+
   return (
     <div className="settings-page p-6">
       <div className="max-w-4xl mx-auto">
@@ -196,6 +238,36 @@ function SettingsPage() {
                 </span>
               ) : (
                 'Exporter les Tâches'
+              )}
+            </button>
+          </div>
+
+          {/* Finitions Export Section */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Export Table des Finitions</h2>
+            <p className="text-gray-600 mb-6">
+              Exportez toutes les finitions avec agent finition, PMS, article, la finition, quantité, date début et date fin en format Excel.
+            </p>
+            
+            <button
+              onClick={handleExportFinitionsTable}
+              disabled={isExportingFinitions}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
+                isExportingFinitions
+                  ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                  : 'bg-[#00AABB] text-white hover:bg-[#008A99] active:bg-[#007688]'
+              }`}
+            >
+              {isExportingFinitions ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Exportation en cours...
+                </span>
+              ) : (
+                'Exporter les Finitions'
               )}
             </button>
           </div>

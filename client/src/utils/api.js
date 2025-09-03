@@ -126,6 +126,14 @@ export const orderAPI = {
   }),
   
   getOrderStats: () => apiCall('/orders/stats'),
+  
+  // History orders (delivered and cancelled)
+  getHistoryOrders: (params = {}) => {
+    const searchParams = new URLSearchParams(params);
+    return apiCall(`/orders/history?${searchParams}`);
+  },
+  
+  getHistoryOrderStats: () => apiCall('/orders/history/stats'),
 }
 
 // Product API calls
@@ -295,6 +303,25 @@ export const exportAPI = {
 
   exportTasksTable: async () => {
     const url = `${API_BASE_URL}/export/tasks`
+    
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+    }
+
+    // Return the blob for file download
+    return response.blob()
+  },
+
+  exportFinitionsTable: async () => {
+    const url = `${API_BASE_URL}/export/finitions`
     
     const response = await fetch(url, {
       credentials: 'include',

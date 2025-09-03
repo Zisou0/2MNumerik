@@ -72,7 +72,8 @@ export const usePriorityNotifications = (orders) => {
     return now > latestStartTime;
   };
 
-  // Setup periodic reminders for overdue orders
+  // Setup periodic reminders for overdue orders - COMMENTED OUT
+  /*
   useEffect(() => {
     const setupOverdueReminders = () => {
       if (!orders || orders.length === 0) return;
@@ -142,6 +143,7 @@ export const usePriorityNotifications = (orders) => {
       overdueReminderRef.current = {};
     };
   }, [orders, addNotification]);
+  */
 
   useEffect(() => {
     if (!orders || orders.length === 0) return;
@@ -160,11 +162,13 @@ export const usePriorityNotifications = (orders) => {
           normal: 'Commande revenue à un délai normal'
         };
 
+        const orderIdentifier = order.numero_pms || order.id || 'Commande inconnue';
+        
         addNotification({
-          title: `Changement de priorité - ${order.numero_pms}`,
+          title: `Changement de priorité - ${orderIdentifier}`,
           message: priorityMessages[currentPriority],
           priority: currentPriority,
-          orderNumber: order.numero_pms,
+          orderNumber: orderIdentifier,
           type: 'priority_change',
           duration: 1800000 // All notifications last 30 minutes
         });
@@ -182,11 +186,13 @@ export const usePriorityNotifications = (orders) => {
             'annule': 'Annulé'
           };
 
+          const orderIdentifier = order.numero_pms || order.id || 'Commande inconnue';
+          
           addNotification({
-            title: `Statut modifié - ${order.numero_pms}`,
+            title: `Statut modifié - ${orderIdentifier}`,
             message: `Nouveau statut: ${statusMessages[order.statut] || order.statut}`,
             priority: currentPriority,
-            orderNumber: order.numero_pms,
+            orderNumber: orderIdentifier,
             type: 'status_change',
             duration: 1800000 // 30 minutes for status changes
           });

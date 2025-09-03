@@ -8,6 +8,7 @@ import ManagementPage from './pages/ManagementPage'
 import ProductsPage from './pages/ProductsPage'
 import ClientsPage from './pages/ClientsPage'
 import HistoryOrdersPage from './pages/HistoryOrdersPage'
+import HistoryAtelierTasksPage from './pages/HistoryAtelierTasksPage'
 import StatisticsPage from './pages/StatisticsPage'
 import AtelierTasksPage from './pages/AtelierTasksPage'
 import Layout from './layout/Layout'
@@ -80,6 +81,14 @@ function AppRoutes() {
         <Route path="dashboard" element={<DashboardPageClean />} />
         <Route path="history" element={<HistoryOrdersPage />} />
         <Route 
+          path="history-atelier-tasks" 
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'atelier']}>
+              <HistoryAtelierTasksPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="products" 
           element={
             <ProtectedRoute allowedRoles={['admin']}>
@@ -87,7 +96,14 @@ function AppRoutes() {
             </ProtectedRoute>
           } 
         />
-        <Route path="clients" element={<ClientsPage />} />
+        <Route 
+          path="clients" 
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'commercial']}>
+              <ClientsPage />
+            </ProtectedRoute>
+          } 
+        />
         <Route 
           path="atelier-tasks" 
           element={
