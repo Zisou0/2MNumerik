@@ -21,8 +21,7 @@ const ClientsPage = () => {
     email: '',
     type_client: '',
     actif: '',
-    code_client: '',
-    numero_affaire: ''
+    code_client: ''
   });
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -188,14 +187,6 @@ const ClientsPage = () => {
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
               />
 
-              <input
-                type="text"
-                placeholder="Numéro d'affaire"
-                value={filters.numero_affaire}
-                onChange={(e) => setFilters({...filters, numero_affaire: e.target.value})}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
-              />
-
               <select
                 value={filters.type_client}
                 onChange={(e) => setFilters({...filters, type_client: e.target.value})}
@@ -220,15 +211,14 @@ const ClientsPage = () => {
               </select>
 
               {/* Clear Filters Button */}
-              {(filters.nom || filters.email || filters.type_client || filters.actif || filters.code_client || filters.numero_affaire) && (
+              {(filters.nom || filters.email || filters.type_client || filters.actif || filters.code_client) && (
                 <button
                   onClick={() => setFilters({
                     nom: '',
                     email: '',
                     type_client: '',
                     actif: '',
-                    code_client: '',
-                    numero_affaire: ''
+                    code_client: ''
                   })}
                   className="text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors duration-200"
                 >
@@ -286,7 +276,6 @@ const ClientsPage = () => {
                     {client.email && <p><span className="font-medium">Email:</span> {client.email}</p>}
                     {client.telephone && <p><span className="font-medium">Téléphone:</span> {client.telephone}</p>}
                     {client.code_client && <p><span className="font-medium">Code client:</span> {client.code_client}</p>}
-                    {client.numero_affaire && <p><span className="font-medium">Numéro d'affaire:</span> {client.numero_affaire}</p>}
                     {client.orders && client.orders.length > 0 && (
                       <p><span className="font-medium">Commandes récentes:</span> {client.orders.length}</p>
                     )}
@@ -558,8 +547,7 @@ const ClientModal = ({ client, onClose, onSave, typeClientOptions }) => {
     adresse: '',
     type_client: 'particulier',
     actif: true,
-    notes: '',
-    numero_affaire: ''
+    notes: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -574,8 +562,7 @@ const ClientModal = ({ client, onClose, onSave, typeClientOptions }) => {
         adresse: client.adresse || '',
         type_client: client.type_client || 'particulier',
         actif: client.actif !== undefined ? client.actif : true,
-        notes: client.notes || '',
-        numero_affaire: client.numero_affaire || ''
+        notes: client.notes || ''
       });
     }
   }, [client]);
@@ -669,18 +656,6 @@ const ClientModal = ({ client, onClose, onSave, typeClientOptions }) => {
                   value={formData.code_client}
                   onChange={(e) => handleChange('code_client', e.target.value)}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Numéro d'affaire
-                </label>
-                <input
-                  type="text"
-                  value={formData.numero_affaire}
-                  onChange={(e) => handleChange('numero_affaire', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -836,8 +811,7 @@ const ImportExcelModal = ({ onClose, onImportSuccess }) => {
         adresse: '123 Rue Example, Paris 75001',
         type_client: 'entreprise',
         actif: true,
-        notes: 'Notes exemple',
-        numero_affaire: 'AFF-2024-001'
+        notes: 'Notes exemple'
       }
     ];
 
@@ -854,8 +828,7 @@ const ImportExcelModal = ({ onClose, onImportSuccess }) => {
       { wch: 40 }, // adresse
       { wch: 15 }, // type_client
       { wch: 8 },  // actif
-      { wch: 30 }, // notes
-      { wch: 18 }  // numero_affaire
+      { wch: 30 }  // notes
     ];
     worksheet['!cols'] = colWidths;
 
@@ -888,7 +861,7 @@ const ImportExcelModal = ({ onClose, onImportSuccess }) => {
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• Le fichier doit être au format Excel (.xlsx ou .xls)</li>
                   <li>• La première ligne doit contenir les en-têtes de colonnes</li>
-                  <li>• Les colonnes acceptées: nom, code_client, email, telephone, adresse, type_client, actif, notes, numero_affaire</li>
+                  <li>• Les colonnes acceptées: nom, code_client, email, telephone, adresse, type_client, actif, notes</li>
                   <li>• Les champs "nom" et "code_client" sont obligatoires</li>
                   <li>• type_client doit être: particulier, entreprise, ou association</li>
                   <li>• <strong>Gestion des doublons:</strong> Si un code_client existe déjà et que le nom est différent, le client sera mis à jour avec les nouvelles données</li>

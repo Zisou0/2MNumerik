@@ -1,4 +1,5 @@
 const { Finition, Product, ProductFinition } = require('../models');
+const { Op } = require('sequelize');
 
 class FinitionController {
   // Get all finitions
@@ -11,7 +12,7 @@ class FinitionController {
       const whereClause = { active: true };
       if (search) {
         whereClause.name = {
-          [require('sequelize').Op.iLike]: `%${search}%`
+          [Op.like]: `%${search}%`
         };
       }
 
@@ -275,7 +276,7 @@ class FinitionController {
       if (is_default) {
         await ProductFinition.update(
           { is_default: false },
-          { where: { product_id: productId, finition_id: { [require('sequelize').Op.ne]: finitionId } } }
+          { where: { product_id: productId, finition_id: { [Op.ne]: finitionId } } }
         );
       }
       

@@ -1,4 +1,5 @@
 const { Product, Finition, ProductFinition } = require('../models');
+const { Op, fn, col } = require('sequelize');
 
 // Get all products
 const getAllProducts = async (req, res) => {
@@ -10,7 +11,7 @@ const getAllProducts = async (req, res) => {
     const whereClause = {};
     if (search) {
       whereClause.name = {
-        [require('sequelize').Op.iLike]: `%${search}%`
+        [Op.like]: `%${search}%`
       };
     }
 

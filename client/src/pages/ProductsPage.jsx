@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { productAPI, finitionAPI } from '../utils/api'
 import Input from '../components/InputComponent'
 import Button from '../components/ButtonComponent'
@@ -9,6 +9,7 @@ const ProductsPage = () => {
   const [products, setProducts] = useState([])
   const [finitions, setFinitions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchLoading, setSearchLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -23,6 +24,12 @@ const ProductsPage = () => {
   const [productFinitions, setProductFinitions] = useState([])
   const [allFinitions, setAllFinitions] = useState([]) // Store all finitions for modal
   const [activeTab, setActiveTab] = useState('products') // 'products' or 'finitions'
+
+  // Search states
+  const [searchTerm, setSearchTerm] = useState('')
+  const [finitionSearchTerm, setFinitionSearchTerm] = useState('')
+  const searchTimeoutRef = useRef(null)
+  const finitionSearchTimeoutRef = useRef(null)
   
   // Pagination states
   const [productsPagination, setProductsPagination] = useState({
@@ -87,12 +94,30 @@ const ProductsPage = () => {
   useEffect(() => {
     loadProducts()
     loadFinitions()
+    
+    // Cleanup timeouts on unmount
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+      if (finitionSearchTimeoutRef.current) {
+        clearTimeout(finitionSearchTimeoutRef.current)
+      }
+    }
   }, [])
 
-  const loadProducts = async (page = 1) => {
+  const loadProducts = async (page = 1, search = '') => {
     try {
-      setLoading(true)
+      if (page === 1 && search !== searchTerm) {
+        setSearchLoading(true)
+      } else {
+        setLoading(true)
+      }
+      
       const params = { page, limit: 10 }
+      if (search) {
+        params.search = search
+      }
       
       const data = await productAPI.getProducts(params)
       setProducts(data.products || [])
@@ -106,12 +131,16 @@ const ProductsPage = () => {
       setError('Erreur lors du chargement des produits: ' + err.message)
     } finally {
       setLoading(false)
+      setSearchLoading(false)
     }
   }
 
-  const loadFinitions = async (page = 1) => {
+  const loadFinitions = async (page = 1, search = '') => {
     try {
       const params = { page, limit: 10 }
+      if (search) {
+        params.search = search
+      }
       
       const data = await finitionAPI.getFinitions(params)
       setFinitions(data.finitions || [])
@@ -125,13 +154,57 @@ const ProductsPage = () => {
     }
   }
 
+  // Debounced search functions
+  const debouncedProductSearch = useCallback((searchValue) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      loadProducts(1, searchValue)
+    }, 300) // 300ms debounce delay
+  }, [])
+
+  const debouncedFinitionSearch = useCallback((searchValue) => {
+    if (finitionSearchTimeoutRef.current) {
+      clearTimeout(finitionSearchTimeoutRef.current)
+    }
+    
+    finitionSearchTimeoutRef.current = setTimeout(() => {
+      loadFinitions(1, searchValue)
+    }, 300) // 300ms debounce delay
+  }, [])
+
+  // Search handlers
+  const handleProductSearch = (e) => {
+    const value = e.target.value
+    setSearchTerm(value)
+    debouncedProductSearch(value)
+  }
+
+  const handleFinitionSearch = (e) => {
+    const value = e.target.value
+    setFinitionSearchTerm(value)
+    debouncedFinitionSearch(value)
+  }
+
+  const clearProductSearch = () => {
+    setSearchTerm('')
+    loadProducts(1, '')
+  }
+
+  const clearFinitionSearch = () => {
+    setFinitionSearchTerm('')
+    loadFinitions(1, '')
+  }
+
   // Pagination handlers
   const handleProductsPageChange = (page) => {
-    loadProducts(page)
+    loadProducts(page, searchTerm)
   }
 
   const handleFinitionsPageChange = (page) => {
-    loadFinitions(page)
+    loadFinitions(page, finitionSearchTerm)
   }
 
 
@@ -178,7 +251,7 @@ const ProductsPage = () => {
       
       resetForm()
       setShowModal(false)
-      loadProducts(productsPagination.currentPage)
+      loadProducts(productsPagination.currentPage, searchTerm)
     } catch (err) {
       setError(err.message)
     }
@@ -199,7 +272,7 @@ const ProductsPage = () => {
       await productAPI.deleteProduct(productId)
       setSuccess('Produit supprimé avec succès')
       setDeleteConfirm(null)
-      loadProducts(productsPagination.currentPage)
+      loadProducts(productsPagination.currentPage, searchTerm)
     } catch (err) {
       setError('Erreur lors de la suppression: ' + err.message)
     }
@@ -296,7 +369,7 @@ const ProductsPage = () => {
       )
       
       setSuccess('Finition ajoutée avec succès')
-      loadProducts(productsPagination.currentPage) // Reload to get updated data
+      loadProducts(productsPagination.currentPage, searchTerm) // Reload to get updated data
       
       // Update local state
       const addedFinition = allFinitions.find(f => f.id === parseInt(finitionFormData.finitionId))
@@ -326,7 +399,7 @@ const ProductsPage = () => {
     try {
       await finitionAPI.removeFinitionFromProduct(selectedProduct.id, finitionId)
       setSuccess('Finition supprimée avec succès')
-      loadProducts(productsPagination.currentPage) // Reload to get updated data
+      loadProducts(productsPagination.currentPage, searchTerm) // Reload to get updated data
       
       // Update local state
       const removedFinition = productFinitions.find(f => f.id === finitionId)
@@ -373,7 +446,7 @@ const ProductsPage = () => {
       
       resetFinitionManagementForm()
       setShowFinitionManagementModal(false)
-      loadFinitions(finitionsPagination.currentPage)
+      loadFinitions(finitionsPagination.currentPage, finitionSearchTerm)
     } catch (err) {
       setError(err.message)
     }
@@ -394,7 +467,7 @@ const ProductsPage = () => {
       await finitionAPI.deleteFinition(finitionId)
       setSuccess('Finition supprimée avec succès')
       setFinitionDeleteConfirm(null)
-      loadFinitions(finitionsPagination.currentPage)
+      loadFinitions(finitionsPagination.currentPage, finitionSearchTerm)
     } catch (err) {
       setError('Erreur lors de la suppression: ' + err.message)
     }
@@ -413,10 +486,10 @@ const ProductsPage = () => {
     setActiveTab(tab)
     if (tab === 'finitions') {
       // Load finitions if tab is switched to 'finitions'
-      loadFinitions(1)
+      loadFinitions(1, finitionSearchTerm)
     } else {
       // Load products if tab is switched to 'products'
-      loadProducts(1)
+      loadProducts(1, searchTerm)
     }
   }
 
@@ -474,6 +547,101 @@ const ProductsPage = () => {
           </nav>
         </div>
       </div>
+
+      {/* Search Bar */}
+      {activeTab === 'products' ? (
+        <div className="mb-6">
+          <div className="relative max-w-md">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg 
+                className={`h-5 w-5 transition-colors duration-200 ${searchLoading ? 'text-blue-500' : 'text-gray-400'}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleProductSearch}
+              className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
+              placeholder="Rechercher des produits..."
+            />
+            {searchTerm && (
+              <button
+                onClick={clearProductSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+            {searchLoading && (
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              </div>
+            )}
+          </div>
+          {searchTerm && (
+            <div className="mt-2 text-sm text-gray-600">
+              {searchLoading ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500 mr-2"></div>
+                  Recherche en cours...
+                </span>
+              ) : (
+                <span>
+                  {productsPagination.totalProducts} résultat{productsPagination.totalProducts !== 1 ? 's' : ''} 
+                  pour "{searchTerm}"
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mb-6">
+          <div className="relative max-w-md">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg 
+                className="h-5 w-5 text-gray-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={finitionSearchTerm}
+              onChange={handleFinitionSearch}
+              className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
+              placeholder="Rechercher des finitions..."
+            />
+            {finitionSearchTerm && (
+              <button
+                onClick={clearFinitionSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {finitionSearchTerm && (
+            <div className="mt-2 text-sm text-gray-600">
+              <span>
+                {finitionsPagination.totalFinitions} résultat{finitionsPagination.totalFinitions !== 1 ? 's' : ''} 
+                pour "{finitionSearchTerm}"
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
@@ -621,8 +789,30 @@ const ProductsPage = () => {
           </table>
           
           {products.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              Aucun produit trouvé
+            <div className="text-center py-12 text-gray-500">
+              {searchTerm ? (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucun produit trouvé</h3>
+                  <p className="text-gray-500">Aucun produit ne correspond à votre recherche "{searchTerm}"</p>
+                  <button
+                    onClick={clearProductSearch}
+                    className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Effacer la recherche
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucun produit</h3>
+                  <p className="text-gray-500">Commencez par créer votre premier produit</p>
+                </div>
+              )}
             </div>
           )}
           
@@ -720,8 +910,30 @@ const ProductsPage = () => {
           ))}
           
           {products.length === 0 && (
-            <div className="text-center py-8 text-gray-500 bg-white rounded-lg shadow">
-              Aucun produit trouvé
+            <div className="text-center py-12 text-gray-500 bg-white rounded-lg shadow">
+              {searchTerm ? (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucun produit trouvé</h3>
+                  <p className="text-gray-500">Aucun produit ne correspond à votre recherche "{searchTerm}"</p>
+                  <button
+                    onClick={clearProductSearch}
+                    className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Effacer la recherche
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucun produit</h3>
+                  <p className="text-gray-500">Commencez par créer votre premier produit</p>
+                </div>
+              )}
             </div>
           )}
           
@@ -790,8 +1002,30 @@ const ProductsPage = () => {
           </table>
           
           {finitions.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              Aucune finition trouvée
+            <div className="text-center py-12 text-gray-500">
+              {finitionSearchTerm ? (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucune finition trouvée</h3>
+                  <p className="text-gray-500">Aucune finition ne correspond à votre recherche "{finitionSearchTerm}"</p>
+                  <button
+                    onClick={clearFinitionSearch}
+                    className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Effacer la recherche
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucune finition</h3>
+                  <p className="text-gray-500">Commencez par créer votre première finition</p>
+                </div>
+              )}
             </div>
           )}
           
@@ -849,8 +1083,30 @@ const ProductsPage = () => {
           ))}
           
           {finitions.length === 0 && (
-            <div className="text-center py-8 text-gray-500 bg-white rounded-lg shadow">
-              Aucune finition trouvée
+            <div className="text-center py-12 text-gray-500 bg-white rounded-lg shadow">
+              {finitionSearchTerm ? (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucune finition trouvée</h3>
+                  <p className="text-gray-500">Aucune finition ne correspond à votre recherche "{finitionSearchTerm}"</p>
+                  <button
+                    onClick={clearFinitionSearch}
+                    className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Effacer la recherche
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Aucune finition</h3>
+                  <p className="text-gray-500">Commencez par créer votre première finition</p>
+                </div>
+              )}
             </div>
           )}
           

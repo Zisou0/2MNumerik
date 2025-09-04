@@ -181,7 +181,8 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     const fetchProducts = async () => {
       try {
         setProductsLoading(true)
-        const response = await productAPI.getProducts()
+        // Request all products by setting a high limit to avoid pagination issues
+        const response = await productAPI.getProducts({ limit: 1000 })
         setAvailableProducts(response.products || [])
       } catch (err) {
         console.error('Error fetching products:', err)

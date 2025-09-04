@@ -23,13 +23,9 @@ class OrderController {
         date_from,
         date_to,
         timeFilter,
-        page = 1, 
-        limit = 10,
         sortBy = 'date_limite_livraison_estimee',
         sortOrder = 'ASC'
       } = req.query;
-
-      const offset = (page - 1) * limit;
 
       // Build where clause for filtering (order-level fields only)
       const whereClause = {};
@@ -197,14 +193,7 @@ class OrderController {
         if (orderIds.length === 0) {
           return res.json({
             message: 'Commandes récupérées avec succès',
-            orders: [],
-            pagination: {
-              currentPage: parseInt(page),
-              totalPages: 0,
-              totalOrders: 0,
-              hasNextPage: false,
-              hasPrevPage: page > 1
-            }
+            orders: []
           });
         }
         
@@ -254,17 +243,13 @@ class OrderController {
           // Preserve the custom order from the first query
           order: [
             [Sequelize.literal(`FIELD(Order.id, ${orderIds.join(',')})`)]
-          ],
-          limit: parseInt(limit),
-          offset: parseInt(offset)
+          ]
         };
       } else {
         // Standard query for other sorts
         queryOptions = {
           where: whereClause,
           order: [[sortBy, sortOrder]],
-          limit: parseInt(limit),
-          offset: parseInt(offset),
           include: [
             {
               model: OrderProduct,
@@ -372,14 +357,7 @@ class OrderController {
 
       res.json({
         message: 'Commandes récupérées avec succès',
-        orders: rows,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(totalCount / limit),
-          totalOrders: totalCount,
-          hasNextPage: page * limit < totalCount,
-          hasPrevPage: page > 1
-        }
+        orders: rows
       });
     } catch (error) {
       console.error('Get orders error:', error);
@@ -1106,12 +1084,8 @@ class OrderController {
         bat,
         pack_fin_annee,
         type_sous_traitance,
-        search,
-        page = 1, 
-        limit = 10
+        search
       } = req.query;
-
-      const offset = (page - 1) * limit;
 
       // Build where clause for order-level filtering
       const whereClause = {};
@@ -1130,14 +1104,7 @@ class OrderController {
           // Invalid status for history
           return res.json({
             message: 'Historique des commandes récupéré avec succès',
-            orders: [],
-            pagination: {
-              currentPage: parseInt(page),
-              totalPages: 0,
-              totalOrders: 0,
-              hasNextPage: false,
-              hasPrevPage: page > 1
-            }
+            orders: []
           });
         }
       } else {
@@ -1225,15 +1192,11 @@ class OrderController {
       // Sort by most recent update
       allProductRows.sort((a, b) => new Date(b.order.updatedAt) - new Date(a.order.updatedAt));
 
-      // Apply pagination to the flattened results
-      const totalCount = allProductRows.length;
-      const paginatedRows = allProductRows.slice(offset, offset + parseInt(limit));
-
       // Format the response to match the expected structure
       const formattedOrders = [];
       const orderMap = new Map();
 
-      paginatedRows.forEach(({ order, orderProduct }) => {
+      allProductRows.forEach(({ order, orderProduct }) => {
         if (!orderMap.has(order.id)) {
           orderMap.set(order.id, {
             ...order.toJSON(),
@@ -1246,14 +1209,7 @@ class OrderController {
 
       res.json({
         message: 'Historique des commandes récupéré avec succès',
-        orders: formattedOrders,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(totalCount / limit),
-          totalOrders: totalCount,
-          hasNextPage: page * limit < totalCount,
-          hasPrevPage: page > 1
-        }
+        orders: formattedOrders
       });
     } catch (error) {
       console.error('Get history orders error:', error);

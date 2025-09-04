@@ -52,13 +52,6 @@ const DashboardPageClean = () => {
     timeFilter: 'all'
   })
   
-  // Pagination
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    totalOrders: 0
-  })
-  
   // Inline editing
   const [inlineEditing, setInlineEditing] = useState({})
   const [tempValues, setTempValues] = useState({})
@@ -320,10 +313,10 @@ const DashboardPageClean = () => {
   const visibleColumns = getVisibleColumns()
 
   // Fetch orders and flatten to order-product rows
-  const fetchOrders = async (page = 1) => {
+  const fetchOrders = async () => {
     try {
       setLoading(true)
-      const params = { page, limit: 10, ...filters }
+      const params = { ...filters }
       Object.keys(params).forEach(key => params[key] === '' && delete params[key])
       
       const response = await orderAPI.getOrders(params)
@@ -381,11 +374,6 @@ const DashboardPageClean = () => {
       })
       
       setOrderProductRows(flatRows)
-      setPagination({
-        currentPage: response.pagination?.currentPage || 1,
-        totalPages: response.pagination?.totalPages || 1,
-        totalOrders: response.pagination?.totalOrders || 0
-      })
     } catch (err) {
       setError('Erreur lors du chargement des commandes')
       console.error('Error fetching orders:', err)
@@ -1675,7 +1663,7 @@ const DashboardPageClean = () => {
     if (orderToDelete) {
       try {
         await orderAPI.deleteOrder(orderToDelete)
-        fetchOrders(pagination.currentPage)
+        fetchOrders()
         fetchStats()
         setShowDeleteDialog(false)
         setOrderToDelete(null)
@@ -1712,18 +1700,18 @@ const DashboardPageClean = () => {
 
     const unsubscribeOrderCreated = subscribe('orderCreated', (newOrder) => {
       if (newOrder.statut !== 'annule' && newOrder.statut !== 'livre') {
-        fetchOrders(pagination.currentPage)
+        fetchOrders()
         fetchStats()
       }
     })
 
     const unsubscribeOrderUpdated = subscribe('orderUpdated', (updatedOrder) => {
-      fetchOrders(pagination.currentPage)
+      fetchOrders()
       fetchStats()
     })
 
     const unsubscribeOrderDeleted = subscribe('orderDeleted', (deletedOrderData) => {
-      fetchOrders(pagination.currentPage)
+      fetchOrders()
       fetchStats()
     })
 
@@ -1732,7 +1720,7 @@ const DashboardPageClean = () => {
       unsubscribeOrderUpdated()
       unsubscribeOrderDeleted()
     }
-  }, [connected, subscribe, pagination.currentPage])
+  }, [connected, subscribe])
 
   if (loading && orderProductRows.length === 0) {
     return (
@@ -1974,160 +1962,121 @@ const DashboardPageClean = () => {
         </div>
       )}
 
-      {/* Urgency Legend */}
-      <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Légende:</h3>
-        
-        {/* Express Orders Section */}
-        <div className="mb-3">
-          <h4 className="text-xs font-semibold text-yellow-700 mb-2 uppercase tracking-wider">Commandes Express (priorité absolue)</h4>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-yellow-50 border-l-2 border-yellow-500 rounded"></div>
-              <span className="text-gray-700">Express</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Regular Orders Section */}
-        <div>
-          <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wider">Urgences des commandes régulières</h4>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-red-200 border-l-2 border-red-500 rounded"></div>
-              <span className="text-gray-700">En retard</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-orange-200 border-l-2 border-orange-500 rounded"></div>
-              <span className="text-gray-700">≤ 30min avant de devoir commencer</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-yellow-200 border-l-2 border-yellow-500 rounded"></div>
-              <span className="text-gray-700">≤ 1h avant de devoir commencer</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-white border-l-2 border-gray-300 rounded"></div>
-              <span className="text-gray-700">Temps suffisant disponible</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Main Table */}
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-green-600">
               <tr>
                 {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
                 {visibleColumns.atelier_concerne && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Atelier
                   </th>
                 )}
                 {visibleColumns.client_info && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Client
                   </th>
                 )}
                 {visibleColumns.product_name && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Produit
                   </th>
                 )}
                 {visibleColumns.quantity && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Quantité
                   </th>
                 )}
                 {visibleColumns.bat && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     BAT
                   </th>
                 )}
                 {visibleColumns.express && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Express
                   </th>
                 )}
                 {visibleColumns.pack_fin_annee && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Pack fin d'année
                   </th>
                 )}
                 {visibleColumns.infograph_en_charge && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Graphiste
                   </th>
                 )}
                 {visibleColumns.numero_pms && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     N° PMS
                   </th>
                 )}
                 {visibleColumns.etape && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Étape
                   </th>
                 )}
                 {visibleColumns.agent_impression && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Agent impression
                   </th>
                 )}
                 {visibleColumns.machine_impression && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Machine impression
                   </th>
                 )}
                 {visibleColumns.statut && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Statut
                   </th>
                 )}
                 {visibleColumns.date_limite_livraison_estimee && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Délais
                   </th>
                 )}
                 {visibleColumns.date_limite_livraison_client && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Délai Client
                   </th>
                 )}
                 {/* Other columns for non-infograph/atelier roles */}
                 {visibleColumns.numero_affaire && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     N° Affaire
                   </th>
                 )}
                 {visibleColumns.numero_dm && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     N° DM
                   </th>
                 )}
                 {visibleColumns.commercial_en_charge && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Commercial
                   </th>
                 )}
                 {visibleColumns.estimated_work_time_minutes && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Temps (min)
                   </th>
                 )}
                 {visibleColumns.commentaires && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Commentaires
                   </th>
                 )}
                 {visibleColumns.type_sous_traitance && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Type sous-traitance
                   </th>
                 )}
                 {canDeleteOrders() && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                     Actions
                   </th>
                 )}
@@ -2432,54 +2381,6 @@ const DashboardPageClean = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => fetchOrders(pagination.currentPage - 1)}
-                disabled={pagination.currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Précédent
-              </button>
-              <button
-                onClick={() => fetchOrders(pagination.currentPage + 1)}
-                disabled={pagination.currentPage === pagination.totalPages}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Suivant
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Page <span className="font-medium">{pagination.currentPage}</span> sur{' '}
-                  <span className="font-medium">{pagination.totalPages}</span> - Total:{' '}
-                  <span className="font-medium">{pagination.totalOrders}</span> éléments
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  {[...Array(pagination.totalPages)].map((_, i) => (
-                    <button
-                      key={i + 1}
-                      onClick={() => fetchOrders(i + 1)}
-                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                        pagination.currentPage === i + 1
-                          ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
-                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Modals */}
@@ -2509,7 +2410,7 @@ const DashboardPageClean = () => {
             setSelectedOrder(null)
           }}
           onSave={() => {
-            fetchOrders(pagination.currentPage)
+            fetchOrders()
             fetchStats()
             setShowCreateModal(false)
             setShowEditModal(false)
