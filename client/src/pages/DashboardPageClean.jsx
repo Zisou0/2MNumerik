@@ -216,7 +216,7 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: false,
         date_limite_livraison_attendue: true,
-        date_limite_livraison_client: true, // New column for client deadline
+        date_limite_livraison_client: false, // Hidden for commercial users
         statut: true,
         etape: true,
         atelier_concerne: false,
@@ -1740,28 +1740,6 @@ const DashboardPageClean = () => {
             <WebSocketStatus />
           </div>
         </div>
-        
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-            <div className="text-2xl font-bold text-blue-600">{stats.total || 0}</div>
-            <div className="text-sm text-gray-600">Total actives</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
-            <div className="text-2xl font-bold text-yellow-600">{stats.problem_technique || 0}</div>
-            <div className="text-sm text-gray-600">Problème technique</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
-            <div className="text-2xl font-bold text-green-600">{stats.en_cours || 0}</div>
-            <div className="text-sm text-gray-600">En cours</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
-            <div className="text-2xl font-bold text-red-600">
-              {sortedOrderProductRows.filter(row => getOrderUrgency(row) === 0).length}
-            </div>
-            <div className="text-sm text-gray-600">En retard</div>
-          </div>
-        </div>
 
         {/* Filters and Actions */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
@@ -1966,117 +1944,117 @@ const DashboardPageClean = () => {
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-green-600">
+            <thead className="bg-[#00AABB]">
               <tr>
                 {/* For infograph/atelier: Atelier - Client - Produit - Quantity - BAT - Express - Graphiste - PMS - Etape - Agent impression - Statut - Délais */}
                 {visibleColumns.atelier_concerne && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Atelier
                   </th>
                 )}
                 {visibleColumns.client_info && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Client
                   </th>
                 )}
                 {visibleColumns.product_name && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Produit
                   </th>
                 )}
                 {visibleColumns.quantity && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Quantité
                   </th>
                 )}
                 {visibleColumns.bat && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     BAT
                   </th>
                 )}
                 {visibleColumns.express && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Express
                   </th>
                 )}
                 {visibleColumns.pack_fin_annee && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Pack fin d'année
                   </th>
                 )}
                 {visibleColumns.infograph_en_charge && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Graphiste
                   </th>
                 )}
                 {visibleColumns.numero_pms && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     N° PMS
                   </th>
                 )}
                 {visibleColumns.etape && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Étape
                   </th>
                 )}
                 {visibleColumns.agent_impression && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Agent impression
                   </th>
                 )}
                 {visibleColumns.machine_impression && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Machine impression
                   </th>
                 )}
                 {visibleColumns.statut && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Statut
                   </th>
                 )}
                 {visibleColumns.date_limite_livraison_estimee && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Délais
                   </th>
                 )}
                 {visibleColumns.date_limite_livraison_client && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Délai Client
                   </th>
                 )}
                 {/* Other columns for non-infograph/atelier roles */}
                 {visibleColumns.numero_affaire && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     N° Affaire
                   </th>
                 )}
                 {visibleColumns.numero_dm && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     N° DM
                   </th>
                 )}
                 {visibleColumns.commercial_en_charge && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Commercial
                   </th>
                 )}
                 {visibleColumns.estimated_work_time_minutes && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Temps (min)
                   </th>
                 )}
                 {visibleColumns.commentaires && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Commentaires
                   </th>
                 )}
                 {visibleColumns.type_sous_traitance && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Type sous-traitance
                   </th>
                 )}
                 {canDeleteOrders() && (
-                  <th className="px-2 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
                     Actions
                   </th>
                 )}
