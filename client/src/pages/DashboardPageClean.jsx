@@ -675,18 +675,18 @@ const DashboardPageClean = () => {
     const now = currentTime
     const deadline = new Date(date_limite_livraison_attendue)
     
-    // Calculate time until deadline
+    // Calculate time until deadline (positive = time left, negative = overdue)
     const timeUntilDeadline = deadline - now
     
     // Determine urgency level based on actual deadline
-    if (timeUntilDeadline < 0) {
-      return 0 // Most urgent - past the deadline (RED)
-    } else if (timeUntilDeadline <= 30 * 60 * 1000) {
-      return 1 // Very urgent - 30 minutes or less until deadline (ORANGE)
-    } else if (timeUntilDeadline <= 60 * 60 * 1000) {
-      return 2 // Urgent - 1 hour or less until deadline (YELLOW)
+    if (timeUntilDeadline <= -30 * 60 * 1000) {
+      return 0 // Most urgent - more than 30 minutes past deadline (RED)
+    } else if (timeUntilDeadline > -30 * 60 * 1000 && timeUntilDeadline <= 0) {
+      return 2 // Urgent - within 30 minutes past deadline (YELLOW)
+    } else if (timeUntilDeadline > 0 && timeUntilDeadline <= 15 * 60 * 1000) {
+      return 1 // Very urgent - 15 minutes or less until deadline (ORANGE)
     } else {
-      return 4 // Normal - enough time available (GRAY)
+      return 4 // Normal - more than 15 minutes until deadline (GRAY)
     }
   }
 
@@ -739,9 +739,9 @@ const DashboardPageClean = () => {
     // Express orders get a special yellow accent
     if (isExpress) {
       switch (urgency) {
-        case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-yellow-500' // Express overdue
-        case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-yellow-500' // Express very urgent
-        case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Express urgent
+        case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-yellow-500' // Express more than 30min overdue
+        case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-yellow-500' // Express 15min until deadline
+        case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Express within 30min past deadline
         case 3: return 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500' // Express medium urgency
         case 4: return 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500' // Express normal
         case 5:
@@ -751,11 +751,11 @@ const DashboardPageClean = () => {
     
     // Non-express orders use regular styling
     switch (urgency) {
-      case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-red-500' // Overdue
-      case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-orange-500' // Very urgent
-      case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Urgent
+      case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-red-500' // More than 30min overdue
+      case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-orange-500' // 15min until deadline
+      case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Within 30min past deadline
       case 3: return 'bg-gray-50 hover:bg-gray-100' // Medium urgency - no deadline set
-      case 4: return 'bg-gray-50 hover:bg-gray-100' // Normal - enough time
+      case 4: return 'bg-gray-50 hover:bg-gray-100' // Normal - more than 15min until deadline
       case 5:
       default: return 'bg-gray-50 hover:bg-gray-100' // Least urgent or default
     }
