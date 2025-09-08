@@ -414,9 +414,11 @@ class OrderController {
         };
       } else if (userRole === 'infograph') {
         // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition
-        orderProductsInclude.where = {
-          etape: { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] }
-        };
+        // However, for getOrderById, we don't apply strict filtering to allow viewing order details
+        // The role-based restrictions are applied at the dashboard level (getAllOrders)
+        // orderProductsInclude.where = {
+        //   etape: { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] }
+        // };
       }
       // Commercial (or any other role) can see everything - no additional filtering
       
@@ -809,6 +811,7 @@ class OrderController {
           numero_pms: product.numero_pms || null,
           infograph_en_charge: product.infograph_en_charge || null,
           agent_impression: product.agent_impression || null,
+          machine_impression: product.machine_impression || null,
           etape: product.etape || null,
           statut: product.statut || 'en_cours',
           estimated_work_time_minutes: product.estimated_work_time_minutes || null,

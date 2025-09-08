@@ -477,52 +477,26 @@ const HistoryOrdersPage = () => {
     setOrderToDelete(null)
   }
 
-  const handleRowClick = (orderProductRow, event) => {
+  const handleRowClick = async (orderProductRow, event) => {
     // Don't open modal if clicking on action buttons or inline edit fields
     if (event.target.closest('.action-button') || event.target.closest('.inline-edit')) {
       return
     }
     
-    // Create a mock order object for the modal from the orderProductRow
-    const mockOrder = {
-      id: orderProductRow.orderId,
-      numero_affaire: orderProductRow.numero_affaire,
-      numero_dm: orderProductRow.numero_dm,
-      numero_pms: orderProductRow.numero_pms,
-      client: orderProductRow.client_info,
-      clientInfo: orderProductRow.clientInfo,
-      commercial_en_charge: orderProductRow.commercial_en_charge,
-      date_limite_livraison_attendue: orderProductRow.date_limite_livraison_attendue,
-      statut: orderProductRow.statut,
-      etape: orderProductRow.etape,
-      createdAt: orderProductRow.createdAt,
-      updatedAt: orderProductRow.updatedAt,
-      orderProducts: [{
-        id: orderProductRow.orderProductId,
-        product_id: orderProductRow.product_id,
-        productInfo: { name: orderProductRow.product_name },
-        product: { name: orderProductRow.product_name },
-        quantity: orderProductRow.quantity,
-        numero_pms: orderProductRow.numero_pms,
-        statut: orderProductRow.statut,
-        etape: orderProductRow.etape,
-        atelier_concerne: orderProductRow.atelier_concerne,
-        infograph_en_charge: orderProductRow.infograph_en_charge,
-        agent_impression: orderProductRow.agent_impression,
-        machine_impression: orderProductRow.machine_impression,
-        date_limite_livraison_estimee: orderProductRow.date_limite_livraison_estimee,
-        estimated_work_time_minutes: orderProductRow.estimated_work_time_minutes,
-        bat: orderProductRow.bat,
-        express: orderProductRow.express,
-        pack_fin_annee: orderProductRow.pack_fin_annee,
-        commentaires: orderProductRow.commentaires,
-        finitions: orderProductRow.finitions || [],
-        orderProductFinitions: orderProductRow.orderProductFinitions || []
-      }]
+    try {
+      // Fetch the complete order with all products from the API
+      const response = await orderAPI.getOrder(orderProductRow.orderId)
+      if (response && response.order) {
+        setSelectedOrder(response.order)
+        setShowViewModal(true)
+      } else {
+        console.error('Failed to fetch order details')
+        setError('Erreur lors du chargement des détails de la commande')
+      }
+    } catch (error) {
+      console.error('Error fetching order for view:', error)
+      setError('Erreur lors du chargement des détails de la commande')
     }
-    
-    setSelectedOrder(mockOrder)
-    setShowViewModal(true)
   }
 
   const formatDate = (dateString) => {

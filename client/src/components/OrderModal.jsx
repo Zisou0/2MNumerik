@@ -10,6 +10,24 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState(1) // 1 = Order Info, 2 = Product Info
   
+  // Helper function to convert date to local datetime-local format without timezone issues
+  const toLocalDateTimeString = (dateString) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    // Adjust for timezone offset to get local time
+    const timezoneOffset = date.getTimezoneOffset() * 60000
+    const localDate = new Date(date.getTime() - timezoneOffset)
+    return localDate.toISOString().slice(0, 16)
+  }
+
+  // Helper function to convert datetime-local string to ISO string for API
+  const toISOString = (localDateTimeString) => {
+    if (!localDateTimeString) return ''
+    // Create date from local datetime string (this treats it as local time)
+    const date = new Date(localDateTimeString)
+    return date.toISOString()
+  }
+  
   // Order-level form data
   const [orderFormData, setOrderFormData] = useState({
     numero_affaire: '',
@@ -66,6 +84,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_pms: false,
           infograph_en_charge: false,
           agent_impression: false,
+          machine_impression: false,
           date_limite_livraison_estimee: false,
           etape: true,
           atelier_concerne: true,
@@ -94,6 +113,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_pms: true,
           infograph_en_charge: true,
           agent_impression: false, // Hidden from infograph users
+          machine_impression: false, // Hidden from infograph users
           date_limite_livraison_estimee: false,
           etape: true,
           atelier_concerne: true,
@@ -216,7 +236,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         client_id: order.client_id || null,
         commercial_en_charge: order.commercial_en_charge || '',
         date_limite_livraison_attendue: order.date_limite_livraison_attendue ? 
-          new Date(order.date_limite_livraison_attendue).toISOString().slice(0, 16) : '',
+          toLocalDateTimeString(order.date_limite_livraison_attendue) : '',
         statut: order.statut || 'en_cours'
       })
       
@@ -239,8 +259,8 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                 finition_id: opf.finition_id,
                 finition_name: opf.finition?.name || 'Finition',
                 assigned_agents: opf.assigned_agents || [],
-                start_date: opf.start_date ? new Date(opf.start_date).toISOString().slice(0, 16) : '',
-                end_date: opf.end_date ? new Date(opf.end_date).toISOString().slice(0, 16) : '',
+                start_date: opf.start_date ? toLocalDateTimeString(opf.start_date) : '',
+                end_date: opf.end_date ? toLocalDateTimeString(opf.end_date) : '',
                 additional_cost: 0, // These fields aren't in the simplified structure
                 additional_time: 0
               }
@@ -259,8 +279,9 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
             numero_pms: orderProduct.numero_pms || '',
             infograph_en_charge: orderProduct.infograph_en_charge || '',
             agent_impression: orderProduct.agent_impression || '',
+            machine_impression: orderProduct.machine_impression || '',
             date_limite_livraison_estimee: orderProduct.date_limite_livraison_estimee ? 
-              new Date(orderProduct.date_limite_livraison_estimee).toISOString().slice(0, 16) : '',
+              toLocalDateTimeString(orderProduct.date_limite_livraison_estimee) : '',
             etape: orderProduct.etape || '',
             atelier_concerne: orderProduct.atelier_concerne || '',
             estimated_work_time_minutes: orderProduct.estimated_work_time_minutes || '',
@@ -378,7 +399,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       infograph_en_charge: '',
       agent_impression: '',
       date_limite_livraison_estimee: orderFormData.date_limite_livraison_attendue || '',
-      etape: 'pré-presse',
+      etape: 'pre-press',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
       bat: '',
@@ -769,10 +790,23 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       const submitData = {
         // Order-level data
         ...orderFormData,
+        // Convert local datetime to ISO string for API
+        date_limite_livraison_attendue: orderFormData.date_limite_livraison_attendue ? 
+          toISOString(orderFormData.date_limite_livraison_attendue) : null,
         commercial_en_charge: orderFormData.commercial_en_charge || user?.username || '',
         client_id: selectedClient?.id || null,
         // Product data
-        products: cleanProducts
+        products: cleanProducts.map(product => ({
+          ...product,
+          // Convert any datetime fields in products
+          date_limite_livraison_estimee: product.date_limite_livraison_estimee ? 
+            toISOString(product.date_limite_livraison_estimee) : null,
+          finitions: product.finitions?.map(finition => ({
+            ...finition,
+            start_date: finition.start_date ? toISOString(finition.start_date) : null,
+            end_date: finition.end_date ? toISOString(finition.end_date) : null
+          })) || []
+        }))
       }
       
       if (order) {
@@ -1768,7 +1802,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                                       <button
                                                         type="button"
                                                         onClick={() => {
-                                                          const now = new Date().toISOString().slice(0, 16)
+                                                          const now = toLocalDateTimeString(new Date().toISOString())
                                                           updateFinitionDates(index, finition.finition_id, finition.start_date, now)
                                                         }}
                                                         className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center gap-2 font-medium"

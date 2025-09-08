@@ -13,9 +13,9 @@ export const usePriorityNotifications = (orders) => {
     currentOrdersRef.current = orders;
   }, [orders]);
 
-  // Function to determine priority level based on delivery deadline and estimated work time
+  // Function to determine priority level based on delivery deadline
   const getPriorityLevel = (orderProductRow) => {
-    const { statut, date_limite_livraison_estimee, estimated_work_time_minutes } = orderProductRow;
+    const { statut, date_limite_livraison_attendue } = orderProductRow;
     
     // If status is finished, return normal priority (no urgent notifications)
     if (statut === 'termine' || statut === 'livre') {
@@ -23,53 +23,41 @@ export const usePriorityNotifications = (orders) => {
     }
     
     // If no deadline date, normal priority
-    if (!date_limite_livraison_estimee) {
+    if (!date_limite_livraison_attendue) {
       return 'normal';
     }
     
     const now = new Date();
-    const deadline = new Date(date_limite_livraison_estimee);
+    const deadline = new Date(date_limite_livraison_attendue);
     
-    // Calculate work time in milliseconds (default to 2 hours if not specified)
-    const workTimeMs = estimated_work_time_minutes ? estimated_work_time_minutes * 60 * 1000 : 2 * 60 * 60 * 1000;
+    // Calculate time until deadline
+    const timeUntilDeadline = deadline - now;
     
-    // Calculate the latest start time (deadline - work time needed)
-    const latestStartTime = new Date(deadline.getTime() - workTimeMs);
-    
-    // Calculate time until we must start working
-    const timeUntilMustStart = latestStartTime - now;
-    
-    // Determine urgency level - map numeric urgency to priority names
-    if (timeUntilMustStart < 0) {
-      return 'overdue'; // Most urgent - past the time we should have started (RED)
-    } else if (timeUntilMustStart <= 30 * 60 * 1000) {
-      return 'urgent'; // Very urgent - 30 minutes or less before must start (ORANGE)
-    } else if (timeUntilMustStart <= 60 * 60 * 1000) {
-      return 'high'; // Urgent - 1 hour or less before must start (YELLOW)
+    // Determine urgency level based on actual deadline
+    if (timeUntilDeadline < 0) {
+      return 'overdue'; // Most urgent - past the deadline (RED)
+    } else if (timeUntilDeadline <= 30 * 60 * 1000) {
+      return 'urgent'; // Very urgent - 30 minutes or less until deadline (ORANGE)
+    } else if (timeUntilDeadline <= 60 * 60 * 1000) {
+      return 'high'; // Urgent - 1 hour or less until deadline (YELLOW)
     } else {
-      return 'normal'; // Normal - enough time available (GRAY)
+      return 'normal'; // Normal - more than 1 hour until deadline (GRAY)
     }
   };
 
-  // Function to check if order is overdue (past the time we should have started working)
+  // Function to check if order is overdue (past the deadline)
   const isOrderOverdue = (orderProductRow) => {
-    const { statut, date_limite_livraison_estimee, estimated_work_time_minutes } = orderProductRow;
+    const { statut, date_limite_livraison_attendue } = orderProductRow;
     
-    if (!date_limite_livraison_estimee || statut === 'termine' || statut === 'livre') {
+    if (!date_limite_livraison_attendue || statut === 'termine' || statut === 'livre') {
       return false;
     }
     
     const now = new Date();
-    const deadline = new Date(date_limite_livraison_estimee);
+    const deadline = new Date(date_limite_livraison_attendue);
     
-    // Calculate work time in milliseconds (default to 2 hours if not specified)
-    const workTimeMs = estimated_work_time_minutes ? estimated_work_time_minutes * 60 * 1000 : 2 * 60 * 60 * 1000;
-    
-    // Calculate the latest start time (deadline - work time needed)
-    const latestStartTime = new Date(deadline.getTime() - workTimeMs);
-    
-    // Order is overdue if we're past the latest start time
-    return now > latestStartTime;
+    // Order is overdue if we're past the deadline
+    return now > deadline;
   };
 
   // Setup periodic reminders for overdue orders - COMMENTED OUT
@@ -100,16 +88,13 @@ export const usePriorityNotifications = (orders) => {
 
             // Check if order is still overdue and not completed
             if (isOrderOverdue(currentOrder)) {
-              const deadline = new Date(currentOrder.date_limite_livraison_estimee);
-              const workTimeMs = currentOrder.estimated_work_time_minutes ? 
-                currentOrder.estimated_work_time_minutes * 60 * 1000 : 2 * 60 * 60 * 1000;
-              const latestStartTime = new Date(deadline.getTime() - workTimeMs);
+              const deadline = new Date(currentOrder.date_limite_livraison_attendue);
               const now = new Date();
-              const minutesOverdue = Math.ceil((now - latestStartTime) / (1000 * 60));
+              const minutesOverdue = Math.ceil((now - deadline) / (1000 * 60));
               
               addNotification({
                 title: `🚨 COMMANDE EN RETARD - ${currentOrder.numero_pms}`,
-                message: `Travail devrait avoir commencé il y a ${minutesOverdue} min ! Échéance: ${new Date(deadline).toLocaleString('fr-FR')}`,
+                message: `Échéance dépassée il y a ${minutesOverdue} min ! Échéance: ${new Date(deadline).toLocaleString('fr-FR')}`,
                 priority: 'overdue',
                 orderNumber: currentOrder.numero_pms,
                 type: 'overdue_reminder',
@@ -156,9 +141,9 @@ export const usePriorityNotifications = (orders) => {
       // Check for priority level changes (color changes)
       if (previousPriority && previousPriority !== currentPriority) {
         const priorityMessages = {
-          overdue: '🚨 URGENT - Temps de démarrage dépassé !',
-          urgent: '⚠️ URGENT - Doit commencer dans 30 min ou moins !',
-          high: '🟡 ATTENTION - Doit commencer dans 1h ou moins !',
+          overdue: '🚨 URGENT - Échéance dépassée !',
+          urgent: '⚠️ URGENT - Échéance dans 30 min ou moins !',
+          high: '🟡 ATTENTION - Échéance dans 1h ou moins !',
           normal: 'Commande revenue à un délai normal'
         };
 
@@ -203,7 +188,7 @@ export const usePriorityNotifications = (orders) => {
       previousOrdersRef.current[order.id] = {
         priority: currentPriority,
         status: order.statut,
-        deadline: order.date_limite_livraison_estimee
+        deadline: order.date_limite_livraison_attendue
       };
     });
 
