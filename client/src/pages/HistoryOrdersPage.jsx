@@ -62,7 +62,7 @@ const HistoryOrdersPage = () => {
   ]
 
   const atelierOptions = ['petit format', 'grand format', 'sous-traitance', 'service crea']
-  const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition']
+  const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition', 'en production', 'controle qualité']
   
   const batOptions = [
     { value: 'avec', label: 'Avec' },

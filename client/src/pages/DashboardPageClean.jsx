@@ -1,16 +1,95 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { orderAPI, userAPI } from '../utils/api'
 import Button from '../components/ButtonComponent'
 import Input from '../components/InputComponent'
 import AlertDialog from '../components/AlertDialog'
 import { useAuth } from '../contexts/AuthContext'
 import { useWebSocket } from '../contexts/WebSocketContext'
-import { usePriorityNotifications } from '../hooks/usePriorityNotifications'
+// import { usePriorityNotifications } from '../hooks/usePriorityNotifications'
 import { useInfographNotifications } from '../hooks/useInfographNotifications'
 import { useAtelierNotifications } from '../hooks/useAtelierNotifications'
+import { useCommercialNotifications } from '../hooks/useCommercialNotifications'
 import OrderModal from '../components/OrderModal'
 import OrderViewModal from '../components/OrderViewModal'
 import WebSocketStatus from '../components/WebSocketStatus'
+
+// Multi-Select Dropdown Component
+const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder, className }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  
+  const handleToggle = (value) => {
+    onChange(value)
+  }
+  
+  const selectedCount = selectedValues.length
+  const displayText = selectedCount === 0 
+    ? placeholder 
+    : selectedCount === 1 
+      ? options.find(opt => opt.value === selectedValues[0])?.label || selectedValues[0]
+      : `${selectedCount} sélectionné(s)`
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`${className} flex items-center justify-between w-full text-left focus:outline-none`}
+      >
+        <span className={selectedCount === 0 ? 'text-gray-500' : 'text-gray-900'}>
+          {displayText}
+        </span>
+        <svg className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setIsOpen(false)}
+          />
+          
+          {/* Dropdown */}
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+            {options.map((option) => {
+              const isSelected = selectedValues.includes(option.value)
+              return (
+                <label
+                  key={option.value}
+                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggle(option.value)}
+                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-900">{option.label}</span>
+                </label>
+              )
+            })}
+            
+            {selectedValues.length > 0 && (
+              <div className="border-t border-gray-200 px-3 py-2">
+                <button
+                  onClick={() => {
+                    selectedValues.forEach(value => onChange(value))
+                    setIsOpen(false)
+                  }}
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  Tout désélectionner
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 const DashboardPageClean = () => {
   const { user } = useAuth()
@@ -18,6 +97,7 @@ const DashboardPageClean = () => {
   
   // State management
   const [orderProductRows, setOrderProductRows] = useState([])
+  const [allOrdersForNotifications, setAllOrdersForNotifications] = useState([]) // Unfiltered orders for notifications
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [stats, setStats] = useState({})
@@ -32,25 +112,102 @@ const DashboardPageClean = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [orderToDelete, setOrderToDelete] = useState(null)
   
-  // Filters
-  const [filters, setFilters] = useState({
-    statut: '',
-    commercial: '',
-    client: '',
-    atelier: '',
-    infograph: '',
-    agent_impression: '',
-    machine_impression: '',
-    etape: '',
-    express: '',
-    bat: '',
-    pack_fin_annee: '',
-    type_sous_traitance: '',
-    search: '',
-    date_from: '',
-    date_to: '',
-    timeFilter: 'all'
+  // Enhanced Filter System with persistence and multi-select support
+  const [filters, setFilters] = useState(() => {
+    // Load filters from localStorage on component initialization
+    const savedFilters = localStorage.getItem('dashboard-filters')
+    return savedFilters ? JSON.parse(savedFilters) : {
+      search: '',
+      statut: [], // Multi-select array
+      commercial: [], // Multi-select array for commercial users
+      client: '',
+      atelier: [], // Multi-select array
+      infograph: [], // Multi-select array for infograph users
+      agent_impression: [], // Multi-select array for atelier users
+      machine_impression: '',
+      etape: [], // Multi-select array
+      express: '',
+      bat: '',
+      pack_fin_annee: '',
+      type_sous_traitance: [],
+      date_from: '',
+      date_to: ''
+    }
   })
+
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('dashboard-filters', JSON.stringify(filters))
+  }, [filters])
+
+  // Check if any filters are active (including arrays)
+  const hasActiveFilters = Object.values(filters).some(value => {
+    if (Array.isArray(value)) {
+      return value.length > 0
+    }
+    return value !== '' && value !== null && value !== undefined
+  })
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    const clearedFilters = {
+      search: '',
+      statut: [],
+      commercial: [],
+      client: '',
+      atelier: [],
+      infograph: [],
+      agent_impression: [],
+      machine_impression: '',
+      etape: [],
+      express: '',
+      bat: '',
+      pack_fin_annee: '',
+      type_sous_traitance: [],
+      date_from: '',
+      date_to: ''
+    }
+    setFilters(clearedFilters)
+    setSearchInput('') // Also clear the search input
+  }
+
+  // Debounced search for better performance
+  const [searchInput, setSearchInput] = useState(filters.search)
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateFilter('search', searchInput)
+    }, 300) // 300ms debounce
+
+    return () => clearTimeout(timer)
+  }, [searchInput])
+
+  // Update search input when filters change externally (like clearing filters)
+  useEffect(() => {
+    setSearchInput(filters.search)
+  }, [filters.search])
+
+  // Update individual filter
+  const updateFilter = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+  }
+
+  // Handle multi-select filter updates
+  const toggleMultiSelectFilter = (key, value) => {
+    setFilters(prev => {
+      const currentArray = prev[key] || []
+      const isSelected = currentArray.includes(value)
+      
+      if (isSelected) {
+        // Remove from array
+        return { ...prev, [key]: currentArray.filter(item => item !== value) }
+      } else {
+        // Add to array
+        return { ...prev, [key]: [...currentArray, value] }
+      }
+    })
+  }
   
   // Inline editing
   const [inlineEditing, setInlineEditing] = useState({})
@@ -67,6 +224,7 @@ const DashboardPageClean = () => {
   // Users for dropdowns
   const [infographUsers, setInfographUsers] = useState([])
   const [atelierUsers, setAtelierUsers] = useState([])
+  const [commercialUsers, setCommercialUsers] = useState([])
   
   // Time-based refresh
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -85,7 +243,7 @@ const DashboardPageClean = () => {
   const atelierOptions = ['petit format', 'grand format', 'sous-traitance', 'service crea']
   
   // All users can now filter by any etape
-  const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition']
+  const etapeOptions = ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition', 'en production', 'controle qualité']
   
   // Helper function to get etape options based on atelier_concerne
   const getEtapeOptionsByAtelier = (atelierConcerne) => {
@@ -98,7 +256,7 @@ const DashboardPageClean = () => {
     } else if (atelier === 'service crea') {
       return ['travail graphique', 'conception']
     } else if (atelier === 'sous-traitance') {
-      return ['impression', 'finition']
+      return ['pré-presse', 'en production', 'controle qualité']
     }
     
     // Default fallback
@@ -144,7 +302,8 @@ const DashboardPageClean = () => {
   
   const batOptions = [
     { value: 'avec', label: 'Avec' },
-    { value: 'sans', label: 'Sans' }
+    { value: 'sans', label: 'Sans' },
+    { value: 'valider', label: 'BAT Valider' }
   ]
   const expressOptions = [
     { value: 'oui', label: 'Oui' },
@@ -191,13 +350,14 @@ const DashboardPageClean = () => {
     return Array.from(orderMap.values())
   }
 
-  // Priority notifications - use converted order format
-  const ordersForNotifications = convertToOrdersFormat(orderProductRows)
-  const { checkUrgentOrders } = usePriorityNotifications(ordersForNotifications)
+  // Priority notifications - use unfiltered orders to avoid false notifications from filtering
+  const ordersForNotifications = convertToOrdersFormat(allOrdersForNotifications)
+  // const { checkUrgentOrders } = usePriorityNotifications(ordersForNotifications)
 
   // Role-specific notifications for etape changes
   useInfographNotifications()
   useAtelierNotifications()
+  useCommercialNotifications()
 
   // Role-based permissions
   const canCreateOrders = () => user && (user.role === 'admin' || user.role === 'commercial')
@@ -216,12 +376,12 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: false,
         date_limite_livraison_attendue: true,
-        date_limite_livraison_client: true, // Show for commercial users
+        date_limite_livraison_client: false, // Hidden for commercial users
         statut: true,
         etape: true,
         atelier_concerne: true,  // Show for commercial users
         infograph_en_charge: true,  // Show for commercial users
-        date_limite_livraison_estimee: false, // Hidden for all users
+        date_limite_livraison_estimee: true, // Show product order date
         estimated_work_time_minutes: false,
         bat: true,  // Show for commercial users
         express: false, // Hidden for all roles
@@ -240,14 +400,14 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: true,
         date_limite_livraison_attendue: false,
-        date_limite_livraison_client: true, // Show for infograph
+        date_limite_livraison_client: false, // Hidden for infograph
         statut: true,
         etape: true,
         atelier_concerne: true,
         infograph_en_charge: true,
         agent_impression: true,
         machine_impression: false, // Not visible to infograph users
-        date_limite_livraison_estimee: false, // Hidden for all users
+        date_limite_livraison_estimee: true, // Show product order date
         estimated_work_time_minutes: false,
         bat: true,
         express: false, // Hidden for all roles
@@ -266,14 +426,14 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: true,
         date_limite_livraison_attendue: false,
-        date_limite_livraison_client: true, // Show for atelier
+        date_limite_livraison_client: false, // Hidden for atelier
         statut: true,
         etape: true,
         atelier_concerne: true,
         infograph_en_charge: true,
         agent_impression: true,
         machine_impression: true, // Visible to atelier users
-        date_limite_livraison_estimee: false, // Hidden for all users
+        date_limite_livraison_estimee: true, // Show product order date
         estimated_work_time_minutes: false,
         bat: true,
         express: false, // Hidden for all roles
@@ -292,14 +452,14 @@ const DashboardPageClean = () => {
         quantity: true,
         numero_pms: true,
         date_limite_livraison_attendue: true,
-        date_limite_livraison_client: true, // Admin sees client deadline
+        date_limite_livraison_client: false, // Admin sees both dates but simplified
         statut: true,
         etape: true,
         atelier_concerne: true,
         infograph_en_charge: true,
         agent_impression: true,
         machine_impression: true,
-        date_limite_livraison_estimee: false, // Hidden for all users
+        date_limite_livraison_estimee: true, // Show product order date
         estimated_work_time_minutes: true,
         bat: true,
         express: false, // Hidden for all roles
@@ -325,7 +485,7 @@ const DashboardPageClean = () => {
       'numero_dm',             // DM
       'etape',                 // Etape
       'statut',                // statut
-      'date_limite_livraison_client',  // Délai
+      'date_limite_livraison_estimee', // Délai
       'type_sous_traitance'    // Type sous-traitance
     ]
   }
@@ -344,7 +504,7 @@ const DashboardPageClean = () => {
       'etape',                 // Étape
       'agent_impression',      // Agent impression
       'statut',                // Statut
-      'date_limite_livraison_client',  // Délai
+      'date_limite_livraison_estimee', // Délai
       'type_sous_traitance'    // Type sous-traitance
     ]
   }
@@ -363,7 +523,7 @@ const DashboardPageClean = () => {
       'numero_dm': 'DM',
       'etape': 'Étape',
       'statut': 'Statut',
-      'date_limite_livraison_client': 'Délai',
+      'date_limite_livraison_estimee': 'Délai',
       'type_sous_traitance': 'Type sous-traitance'
     }
 
@@ -400,7 +560,7 @@ const DashboardPageClean = () => {
       'etape': 'Étape',
       'agent_impression': 'Agent impression',
       'statut': 'Statut',
-      'date_limite_livraison_client': 'Délai',
+      'date_limite_livraison_estimee': 'Délai',
       'type_sous_traitance': 'Type sous-traitance'
     }
 
@@ -455,8 +615,8 @@ const DashboardPageClean = () => {
                     return renderInlineEtape(row)
                   case 'statut':
                     return renderInlineStatus(row)
-                  case 'date_limite_livraison_client':
-                    return renderInlineDate(row, 'date_limite_livraison_attendue')
+                  case 'date_limite_livraison_estimee':
+                    return renderInlineDate(row, 'date_limite_livraison_estimee')
                   case 'type_sous_traitance':
                     return renderInlineSousTraitance(row)
                   default:
@@ -522,6 +682,8 @@ const DashboardPageClean = () => {
                     return renderInlineStatus(row)
                   case 'date_limite_livraison_client':
                     return renderInlineDate(row, 'date_limite_livraison_attendue')
+                  case 'date_limite_livraison_estimee':
+                    return renderInlineDate(row, 'date_limite_livraison_estimee')
                   case 'type_sous_traitance':
                     return renderInlineSousTraitance(row)
                   default:
@@ -564,16 +726,55 @@ const DashboardPageClean = () => {
     return Object.values(visibleColumns).filter(Boolean).length + (canDeleteOrders() ? 1 : 0)
   }
 
-  // Fetch orders and flatten to order-product rows
-  const fetchOrders = async () => {
+  // Fetch orders and flatten to order-product rows - with persistent filters
+  const fetchOrders = useCallback(async (preserveFilters = true) => {
     try {
       setLoading(true)
-      const params = { ...filters }
-      Object.keys(params).forEach(key => params[key] === '' && delete params[key])
       
+      // Create params object from current filters, removing empty values
+      const params = {}
+      Object.keys(filters).forEach(key => {
+        const value = filters[key]
+        if (Array.isArray(value)) {
+          // For array filters, convert to comma-separated string if not empty
+          if (value.length > 0) {
+            params[key] = value.join(',')
+          }
+        } else {
+          // For string filters, only add if not empty
+          if (value && value !== '' && value !== null && value !== undefined) {
+            params[key] = value
+          }
+        }
+      })
+      
+      // Get filtered orders for display
       const response = await orderAPI.getOrders(params)
       
-      // Flatten orders to order-product rows
+      // Also get all orders (unfiltered) for notifications - but only if no filters are active
+      // This prevents unnecessary API calls when filters are active
+      const hasActiveFiltersCheck = Object.values(filters).some(value => {
+        if (Array.isArray(value)) {
+          return value.length > 0
+        }
+        return value !== '' && value !== null && value !== undefined
+      })
+      
+      let allOrdersResponse = response // Default to filtered response
+      if (!hasActiveFiltersCheck) {
+        // If no filters are active, the response already contains all orders
+        allOrdersResponse = response
+      } else {
+        // If filters are active, get unfiltered orders for notifications
+        try {
+          allOrdersResponse = await orderAPI.getOrders({}) // No params = all orders
+        } catch (err) {
+          console.warn('Could not fetch unfiltered orders for notifications:', err)
+          allOrdersResponse = response // Fallback to filtered orders
+        }
+      }
+      
+      // Flatten filtered orders to order-product rows for display
       const flatRows = []
       response.orders.forEach(order => {
         if (order.orderProducts && order.orderProducts.length > 0) {
@@ -625,38 +826,67 @@ const DashboardPageClean = () => {
         }
       })
       
+      // Flatten all orders for notifications
+      const allOrdersFlat = []
+      allOrdersResponse.orders.forEach(order => {
+        if (order.orderProducts && order.orderProducts.length > 0) {
+          order.orderProducts.forEach(orderProduct => {
+            const productStatus = orderProduct.statut || order.statut
+            
+            allOrdersFlat.push({
+              orderProductId: orderProduct.id,
+              orderId: order.id,
+              numero_affaire: order.numero_affaire,
+              numero_dm: order.numero_dm,
+              numero_pms: orderProduct.numero_pms,
+              client_info: order.clientInfo?.nom || order.client,
+              commercial_en_charge: order.commercial_en_charge,
+              date_limite_livraison_attendue: order.date_limite_livraison_attendue,
+              statut: productStatus,
+              etape: orderProduct.etape,
+              express: orderProduct.express,
+              createdAt: order.createdAt,
+              updatedAt: order.updatedAt
+            })
+          })
+        }
+      })
+      
       setOrderProductRows(flatRows)
+      setAllOrdersForNotifications(allOrdersFlat)
     } catch (err) {
       setError('Erreur lors du chargement des commandes')
       console.error('Error fetching orders:', err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
 
   // Fetch statistics
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await orderAPI.getOrderStats()
       setStats(response.stats)
     } catch (err) {
       console.error('Error fetching stats:', err)
     }
-  }
+  }, [])
 
   // Fetch users by role for dropdowns
-  const fetchUsersByRole = async () => {
+  const fetchUsersByRole = useCallback(async () => {
     try {
-      const [infographResponse, atelierResponse] = await Promise.all([
+      const [infographResponse, atelierResponse, commercialResponse] = await Promise.all([
         userAPI.getUsers({ role: 'infograph' }),
-        userAPI.getUsers({ role: 'atelier' })
+        userAPI.getUsers({ role: 'atelier' }),
+        userAPI.getUsers({ role: 'commercial' })
       ])
       setInfographUsers(infographResponse.users || [])
       setAtelierUsers(atelierResponse.users || [])
+      setCommercialUsers(commercialResponse.users || [])
     } catch (err) {
       console.error('Error fetching users:', err)
     }
-  }
+  }, [])
 
   // Calculate urgency for sorting and coloring
   const getOrderUrgency = (orderProductRow) => {
@@ -679,14 +909,14 @@ const DashboardPageClean = () => {
     const timeUntilDeadline = deadline - now
     
     // Determine urgency level based on actual deadline
-    if (timeUntilDeadline <= -30 * 60 * 1000) {
-      return 0 // Most urgent - more than 30 minutes past deadline (RED)
-    } else if (timeUntilDeadline > -30 * 60 * 1000 && timeUntilDeadline <= 0) {
-      return 2 // Urgent - within 30 minutes past deadline (YELLOW)
+    if (timeUntilDeadline <= 0) {
+      return 0 // Most urgent - past deadline (RED)
     } else if (timeUntilDeadline > 0 && timeUntilDeadline <= 15 * 60 * 1000) {
       return 1 // Very urgent - 15 minutes or less until deadline (ORANGE)
+    } else if (timeUntilDeadline > 15 * 60 * 1000 && timeUntilDeadline <= 30 * 60 * 1000) {
+      return 2 // Urgent - 30 minutes or less until deadline (YELLOW)
     } else {
-      return 4 // Normal - more than 15 minutes until deadline (GRAY)
+      return 4 // Normal - more than 30 minutes until deadline (GRAY)
     }
   }
 
@@ -739,9 +969,9 @@ const DashboardPageClean = () => {
     // Express orders get a special yellow accent
     if (isExpress) {
       switch (urgency) {
-        case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-yellow-500' // Express more than 30min overdue
+        case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-yellow-500' // Express past deadline
         case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-yellow-500' // Express 15min until deadline
-        case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Express within 30min past deadline
+        case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Express 30min until deadline
         case 3: return 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500' // Express medium urgency
         case 4: return 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500' // Express normal
         case 5:
@@ -751,11 +981,11 @@ const DashboardPageClean = () => {
     
     // Non-express orders use regular styling
     switch (urgency) {
-      case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-red-500' // More than 30min overdue
+      case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-red-500' // Past deadline
       case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-orange-500' // 15min until deadline
-      case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Within 30min past deadline
+      case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // 30min until deadline
       case 3: return 'bg-gray-50 hover:bg-gray-100' // Medium urgency - no deadline set
-      case 4: return 'bg-gray-50 hover:bg-gray-100' // Normal - more than 15min until deadline
+      case 4: return 'bg-gray-50 hover:bg-gray-100' // Normal - more than 30min until deadline
       case 5:
       default: return 'bg-gray-50 hover:bg-gray-100' // Least urgent or default
     }
@@ -869,13 +1099,17 @@ const DashboardPageClean = () => {
         await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.product_id, { [field]: valueToSend })
       }
 
-      // Update local state
+      // Update local state to avoid losing filters
       if (field === 'statut' && (newValue === 'annule' || newValue === 'livre')) {
+        // Remove the order product from display but keep filters
         setOrderProductRows(orderProductRows.filter(row => row.orderProductId !== orderProductId))
       } else {
-        setOrderProductRows(orderProductRows.map(row => 
-          row.orderProductId === orderProductId ? { ...row, [field]: valueToSend } : row
-        ))
+        // Update the specific row in local state
+        setOrderProductRows(prevRows => 
+          prevRows.map(row => 
+            row.orderProductId === orderProductId ? { ...row, [field]: valueToSend } : row
+          )
+        )
       }
 
       // Update selectedOrder if modal is open and it's the same order
@@ -907,7 +1141,7 @@ const DashboardPageClean = () => {
       setInlineEditing({ ...inlineEditing, [editKey]: false })
       setTempValues({ ...tempValues, [editKey]: null })
 
-      // Refresh stats if status changed
+      // Refresh stats if status changed (but don't refetch orders to preserve filters)
       if (field === 'statut') {
         fetchStats()
       }
@@ -939,14 +1173,16 @@ const DashboardPageClean = () => {
       // Use the actual product_id, not the orderProduct.id
       await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.product_id, updateData)
 
-      // Update local state
-      setOrderProductRows(orderProductRows.map(row => 
-        row.orderProductId === orderProductId ? { 
-          ...row, 
-          statut: newValue,
-          commentaires: newComments
-        } : row
-      ))
+      // Update local state to preserve filters
+      setOrderProductRows(prevRows => 
+        prevRows.map(row => 
+          row.orderProductId === orderProductId ? { 
+            ...row, 
+            statut: newValue,
+            commentaires: newComments
+          } : row
+        )
+      )
 
       // Update selectedOrder if modal is open and it's the same order
       if (selectedOrder && showViewModal && orderProductRow.orderId === selectedOrder.id) {
@@ -969,7 +1205,7 @@ const DashboardPageClean = () => {
       setInlineEditing({ ...inlineEditing, [editKey]: false })
       setTempValues({ ...tempValues, [editKey]: null })
 
-      // Refresh stats since status changed
+      // Refresh stats since status changed (but don't refetch orders to preserve filters)
       fetchStats()
     } catch (err) {
       setError('Erreur lors de la mise à jour')
@@ -1277,6 +1513,8 @@ const DashboardPageClean = () => {
         return 'bg-green-100 text-green-800 border border-green-200'
       } else if (value === 'sans') {
         return 'bg-red-100 text-red-800 border border-red-200'
+      } else if (value === 'valider') {
+        return 'bg-blue-100 text-blue-800 border border-blue-200'
       } else {
         return 'bg-gray-100 text-gray-800 border border-gray-200'
       }
@@ -1864,6 +2102,7 @@ const DashboardPageClean = () => {
     if (orderToDelete) {
       try {
         await orderAPI.deleteOrder(orderToDelete)
+        // Refresh data without resetting filters
         fetchOrders()
         fetchStats()
         setShowDeleteDialog(false)
@@ -1881,12 +2120,16 @@ const DashboardPageClean = () => {
     setOrderToDelete(null)
   }
 
-  // Effects
+  // Effects - Load data when filters change
   useEffect(() => {
     fetchOrders()
+  }, [fetchOrders]) // Only depend on fetchOrders, which depends on filters
+
+  // Load stats and users once on mount
+  useEffect(() => {
     fetchStats()
     fetchUsersByRole()
-  }, [filters])
+  }, [fetchStats, fetchUsersByRole])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1895,24 +2138,202 @@ const DashboardPageClean = () => {
     return () => clearInterval(timer)
   }, [])
 
-  // WebSocket listeners
+  // WebSocket listeners - with proper filter preservation to prevent unwanted rows appearing
   useEffect(() => {
     if (!connected) return
 
-    const unsubscribeOrderCreated = subscribe('orderCreated', (newOrder) => {
-      if (newOrder.statut !== 'annule' && newOrder.statut !== 'livre') {
-        fetchOrders()
-        fetchStats()
+    // Helper function to check if a row matches current filters
+    const rowMatchesFilters = (row) => {
+      // If no filters are active, all rows match
+      if (!hasActiveFilters) return true
+      
+      // Check each filter
+      if (filters.search && row.numero_pms && !row.numero_pms.toLowerCase().includes(filters.search.toLowerCase())) {
+        return false
       }
+      
+      if (filters.client && row.client_info && !row.client_info.toLowerCase().includes(filters.client.toLowerCase())) {
+        return false
+      }
+      
+      if (filters.commercial.length > 0 && (!row.commercial_en_charge || !filters.commercial.includes(row.commercial_en_charge))) {
+        return false
+      }
+      
+      if (filters.infograph.length > 0 && (!row.infograph_en_charge || !filters.infograph.includes(row.infograph_en_charge))) {
+        return false
+      }
+      
+      if (filters.agent_impression.length > 0 && (!row.agent_impression || !filters.agent_impression.includes(row.agent_impression))) {
+        return false
+      }
+      
+      if (filters.atelier.length > 0 && (!row.atelier_concerne || !filters.atelier.includes(row.atelier_concerne))) {
+        return false
+      }
+      
+      if (filters.etape.length > 0 && (!row.etape || !filters.etape.includes(row.etape))) {
+        return false
+      }
+      
+      if (filters.statut.length > 0 && (!row.statut || !filters.statut.includes(row.statut))) {
+        return false
+      }
+      
+      if (filters.type_sous_traitance.length > 0 && (!row.type_sous_traitance || !filters.type_sous_traitance.includes(row.type_sous_traitance))) {
+        return false
+      }
+      
+      if (filters.express && row.express !== filters.express) {
+        return false
+      }
+      
+      if (filters.bat && row.bat !== filters.bat) {
+        return false
+      }
+      
+      if (filters.pack_fin_annee && String(row.pack_fin_annee) !== filters.pack_fin_annee) {
+        return false
+      }
+      
+      if (filters.machine_impression && row.machine_impression && !row.machine_impression.toLowerCase().includes(filters.machine_impression.toLowerCase())) {
+        return false
+      }
+      
+      // Date filters
+      if (filters.date_from) {
+        const dateFrom = new Date(filters.date_from)
+        const rowDate = new Date(row.date_limite_livraison_attendue)
+        if (rowDate < dateFrom) return false
+      }
+      
+      if (filters.date_to) {
+        const dateTo = new Date(filters.date_to)
+        const rowDate = new Date(row.date_limite_livraison_attendue)
+        if (rowDate > dateTo) return false
+      }
+      
+      return true
+    }
+
+    const unsubscribeOrderCreated = subscribe('orderCreated', (newOrder) => {
+      // Only update stats for new orders, don't add to filtered view unless it matches filters
+      fetchStats()
+      
+      // If no filters active, we can safely add the new order
+      if (!hasActiveFilters && newOrder.statut !== 'annule' && newOrder.statut !== 'livre') {
+        if (newOrder.orderProducts && newOrder.orderProducts.length > 0) {
+          const newFlatRows = []
+          newOrder.orderProducts.forEach(orderProduct => {
+            const productStatus = orderProduct.statut || newOrder.statut
+            
+            const newRow = {
+              orderProductId: orderProduct.id,
+              orderId: newOrder.id,
+              numero_affaire: newOrder.numero_affaire,
+              numero_dm: newOrder.numero_dm,
+              client_info: newOrder.clientInfo?.nom || newOrder.client,
+              commercial_en_charge: newOrder.commercial_en_charge,
+              date_limite_livraison_attendue: newOrder.date_limite_livraison_attendue,
+              product_id: orderProduct.product_id,
+              product_name: orderProduct.product?.name || orderProduct.productInfo?.name || 'Produit',
+              quantity: orderProduct.quantity,
+              numero_pms: orderProduct.numero_pms,
+              statut: productStatus,
+              etape: orderProduct.etape,
+              atelier_concerne: orderProduct.atelier_concerne,
+              infograph_en_charge: orderProduct.infograph_en_charge,
+              agent_impression: orderProduct.agent_impression,
+              machine_impression: orderProduct.machine_impression,
+              date_limite_livraison_estimee: orderProduct.date_limite_livraison_estimee,
+              estimated_work_time_minutes: orderProduct.estimated_work_time_minutes,
+              bat: orderProduct.bat,
+              express: orderProduct.express,
+              pack_fin_annee: orderProduct.pack_fin_annee,
+              type_sous_traitance: orderProduct.type_sous_traitance,
+              commentaires: orderProduct.commentaires,
+              finitions: orderProduct.finitions || [],
+              orderProductFinitions: orderProduct.orderProductFinitions || [],
+              clientInfo: newOrder.clientInfo || { nom: newOrder.client },
+              createdAt: newOrder.createdAt,
+              updatedAt: newOrder.updatedAt
+            }
+            newFlatRows.push(newRow)
+          })
+          
+          // Add to existing orders only if no filters active
+          setOrderProductRows(prev => [...newFlatRows, ...prev])
+        }
+      }
+      // If filters are active, don't add new rows to prevent filter corruption
+      // The user will see the new order when they refresh or clear filters
     })
 
     const unsubscribeOrderUpdated = subscribe('orderUpdated', (updatedOrder) => {
-      fetchOrders()
+      // Always remove old versions of this order's products first
+      setOrderProductRows(prev => {
+        const filteredRows = prev.filter(row => row.orderId !== updatedOrder.id)
+        
+        // Only add updated versions if the order should be visible based on current filters
+        if (updatedOrder.orderProducts && updatedOrder.orderProducts.length > 0 && 
+            updatedOrder.statut !== 'annule' && updatedOrder.statut !== 'livre') {
+          
+          const updatedFlatRows = []
+          updatedOrder.orderProducts.forEach(orderProduct => {
+            const productStatus = orderProduct.statut || updatedOrder.statut
+            
+            const updatedRow = {
+              orderProductId: orderProduct.id,
+              orderId: updatedOrder.id,
+              numero_affaire: updatedOrder.numero_affaire,
+              numero_dm: updatedOrder.numero_dm,
+              client_info: updatedOrder.clientInfo?.nom || updatedOrder.client,
+              commercial_en_charge: updatedOrder.commercial_en_charge,
+              date_limite_livraison_attendue: updatedOrder.date_limite_livraison_attendue,
+              product_id: orderProduct.product_id,
+              product_name: orderProduct.product?.name || orderProduct.productInfo?.name || 'Produit',
+              quantity: orderProduct.quantity,
+              numero_pms: orderProduct.numero_pms,
+              statut: productStatus,
+              etape: orderProduct.etape,
+              atelier_concerne: orderProduct.atelier_concerne,
+              infograph_en_charge: orderProduct.infograph_en_charge,
+              agent_impression: orderProduct.agent_impression,
+              machine_impression: orderProduct.machine_impression,
+              date_limite_livraison_estimee: orderProduct.date_limite_livraison_estimee,
+              estimated_work_time_minutes: orderProduct.estimated_work_time_minutes,
+              bat: orderProduct.bat,
+              express: orderProduct.express,
+              pack_fin_annee: orderProduct.pack_fin_annee,
+              type_sous_traitance: orderProduct.type_sous_traitance,
+              commentaires: orderProduct.commentaires,
+              finitions: orderProduct.finitions || [],
+              orderProductFinitions: orderProduct.orderProductFinitions || [],
+              clientInfo: updatedOrder.clientInfo || { nom: updatedOrder.client },
+              createdAt: updatedOrder.createdAt,
+              updatedAt: updatedOrder.updatedAt
+            }
+            
+            // Only add the row if it matches current filters
+            if (rowMatchesFilters(updatedRow)) {
+              updatedFlatRows.push(updatedRow)
+            }
+          })
+          
+          return [...updatedFlatRows, ...filteredRows]
+        }
+        
+        return filteredRows
+      })
+      
+      // Update stats
       fetchStats()
     })
 
     const unsubscribeOrderDeleted = subscribe('orderDeleted', (deletedOrderData) => {
-      fetchOrders()
+      // Remove deleted order from local state
+      setOrderProductRows(prev => prev.filter(row => row.orderId !== deletedOrderData.orderId))
+      // Update stats
       fetchStats()
     })
 
@@ -1921,7 +2342,7 @@ const DashboardPageClean = () => {
       unsubscribeOrderUpdated()
       unsubscribeOrderDeleted()
     }
-  }, [connected, subscribe])
+  }, [connected, subscribe, hasActiveFilters, filters])
 
   if (loading && orderProductRows.length === 0) {
     return (
@@ -1942,17 +2363,17 @@ const DashboardPageClean = () => {
           </div>
         </div>
 
-        {/* Filters and Actions */}
+        {/* Restored Original Filter System with Persistence */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-3 flex-1">
-              {/* PMS Search Field */}
+              {/* 1. Search Field - Recherche par N° PMS */}
               <div className="relative">
                 <input
                   type="text"
                   placeholder="Rechercher par N° PMS"
-                  value={filters.search || ''}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm w-64"
                 />
                 <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1960,99 +2381,82 @@ const DashboardPageClean = () => {
                 </svg>
               </div>
 
-              {/* Status Filter */}
-              <select
-                value={filters.statut}
-                onChange={(e) => setFilters({ ...filters, statut: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">Tous les statuts</option>
-                {statusOptions.map(status => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-
-              {/* Commercial Filter */}
-              <input
-                type="text"
-                placeholder="Commercial"
-                value={filters.commercial}
-                onChange={(e) => setFilters({ ...filters, commercial: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-
-              {/* Client Filter */}
+              {/* 2. Client Filter */}
               <input
                 type="text"
                 placeholder="Client"
                 value={filters.client}
-                onChange={(e) => setFilters({ ...filters, client: e.target.value })}
+                onChange={(e) => updateFilter('client', e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
 
-              {/* Infograph Filter */}
-              <input
-                type="text"
+              {/* 3. Commercial Filter - Multi-select dropdown */}
+              <MultiSelectDropdown
+                options={commercialUsers.map(user => ({ value: user.username, label: user.username }))}
+                selectedValues={filters.commercial}
+                onChange={(value) => toggleMultiSelectFilter('commercial', value)}
+                placeholder="Commercial"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-32"
+              />
+
+              {/* 4. Infograph Filter - Multi-select dropdown */}
+              <MultiSelectDropdown
+                options={infographUsers.map(user => ({ value: user.username, label: user.username }))}
+                selectedValues={filters.infograph}
+                onChange={(value) => toggleMultiSelectFilter('infograph', value)}
                 placeholder="Infographe"
-                value={filters.infograph}
-                onChange={(e) => setFilters({ ...filters, infograph: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-32"
               />
 
-              {/* Workshop Filter */}
-              <select
-                value={filters.atelier}
-                onChange={(e) => setFilters({ ...filters, atelier: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">Tous les ateliers</option>
-                {atelierOptions.map(atelier => (
-                  <option key={atelier} value={atelier}>
-                    {atelier}
-                  </option>
-                ))}
-              </select>
-
-              {/* Agent Impression Filter */}
-              <input
-                type="text"
+              {/* 5. Agent Impression Filter - Multi-select dropdown */}
+              <MultiSelectDropdown
+                options={atelierUsers.map(user => ({ value: user.username, label: user.username }))}
+                selectedValues={filters.agent_impression}
+                onChange={(value) => toggleMultiSelectFilter('agent_impression', value)}
                 placeholder="Agent impression"
-                value={filters.agent_impression}
-                onChange={(e) => setFilters({ ...filters, agent_impression: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-32"
               />
 
-              {/* Machine Impression Filter - Only visible for admin and atelier users */}
-              {(user?.role === 'admin' || user?.role === 'atelier') && (
-                <input
-                  type="text"
-                  placeholder="Machine impression"
-                  value={filters.machine_impression}
-                  onChange={(e) => setFilters({ ...filters, machine_impression: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              )}
+              {/* 6. Workshop Filter - Tous les ateliers - Multi-select */}
+              <MultiSelectDropdown
+                options={atelierOptions.map(atelier => ({ value: atelier, label: atelier }))}
+                selectedValues={filters.atelier}
+                onChange={(value) => toggleMultiSelectFilter('atelier', value)}
+                placeholder="Tous les ateliers"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-40"
+              />
 
-              {/* Etape Filter */}
-              <select
-                value={filters.etape}
-                onChange={(e) => setFilters({ ...filters, etape: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">Toutes les étapes</option>
-                {etapeOptions.map(etape => (
-                  <option key={etape} value={etape}>
-                    {etape}
-                  </option>
-                ))}
-              </select>
+              {/* 7. Etape Filter - Toutes les étapes - Multi-select */}
+              <MultiSelectDropdown
+                options={etapeOptions.map(etape => ({ value: etape, label: etape }))}
+                selectedValues={filters.etape}
+                onChange={(value) => toggleMultiSelectFilter('etape', value)}
+                placeholder="Toutes les étapes"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-40"
+              />
 
-              {/* Express Filter */}
+              {/* 8. Status Filter - Tous les statuts - Multi-select */}
+              <MultiSelectDropdown
+                options={statusOptions}
+                selectedValues={filters.statut}
+                onChange={(value) => toggleMultiSelectFilter('statut', value)}
+                placeholder="Tous les statuts"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-40"
+              />
+
+              {/* 9. Type Sous-traitance Filter - Multi-select */}
+              <MultiSelectDropdown
+                options={sousTraitanceOptions}
+                selectedValues={filters.type_sous_traitance}
+                onChange={(value) => toggleMultiSelectFilter('type_sous_traitance', value)}
+                placeholder="Type sous-traitance"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-40"
+              />
+
+              {/* 10. Express Filter - Toutes les urgences */}
               <select
-                value={filters.express || ''}
-                onChange={(e) => setFilters({ ...filters, express: e.target.value })}
+                value={filters.express}
+                onChange={(e) => updateFilter('express', e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="">Toutes les urgences</option>
@@ -2060,10 +2464,10 @@ const DashboardPageClean = () => {
                 <option value="non">Non express</option>
               </select>
 
-              {/* BAT Filter */}
+              {/* 11. BAT Filter - Tous les BAT */}
               <select
-                value={filters.bat || ''}
-                onChange={(e) => setFilters({ ...filters, bat: e.target.value })}
+                value={filters.bat}
+                onChange={(e) => updateFilter('bat', e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="">Tous les BAT</option>
@@ -2071,10 +2475,10 @@ const DashboardPageClean = () => {
                 <option value="sans">Sans BAT</option>
               </select>
 
-              {/* Pack Fin d'Année Filter */}
+              {/* 12. Pack Fin d'Année Filter */}
               <select
-                value={filters.pack_fin_annee || ''}
-                onChange={(e) => setFilters({ ...filters, pack_fin_annee: e.target.value })}
+                value={filters.pack_fin_annee}
+                onChange={(e) => updateFilter('pack_fin_annee', e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="">Pack fin d'année</option>
@@ -2082,41 +2486,21 @@ const DashboardPageClean = () => {
                 <option value="false">Non</option>
               </select>
 
-              {/* Type Sous-traitance Filter */}
-              <select
-                value={filters.type_sous_traitance || ''}
-                onChange={(e) => setFilters({ ...filters, type_sous_traitance: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">Type sous-traitance</option>
-                {sousTraitanceOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              {/* Machine Impression Filter - Only visible for admin and atelier users */}
+              {(user?.role === 'admin' || user?.role === 'atelier') && (
+                <input
+                  type="text"
+                  placeholder="Machine impression"
+                  value={filters.machine_impression}
+                  onChange={(e) => updateFilter('machine_impression', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              )}
 
               {/* Clear Filters */}
-              {Object.values(filters).some(v => v !== '' && v !== 'all') && (
+              {hasActiveFilters && (
                 <button
-                  onClick={() => setFilters({
-                    statut: '',
-                    commercial: '',
-                    client: '',
-                    atelier: '',
-                    infograph: '',
-                    agent_impression: '',
-                    machine_impression: '',
-                    etape: '',
-                    express: '',
-                    bat: '',
-                    pack_fin_annee: '',
-                    type_sous_traitance: '',
-                    search: '',
-                    date_from: '',
-                    date_to: '',
-                    timeFilter: 'all'
-                  })}
+                  onClick={clearAllFilters}
                   className="text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors duration-200"
                 >
                   Effacer filtres
@@ -2212,12 +2596,12 @@ const DashboardPageClean = () => {
                     )}
                     {visibleColumns.date_limite_livraison_estimee && (
                       <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
-                        Délais
+                        Délai produit
                       </th>
                     )}
                     {visibleColumns.date_limite_livraison_client && (
                       <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">
-                        Délais
+                        Délai client
                       </th>
                     )}
                     {visibleColumns.type_sous_traitance && (
@@ -2271,18 +2655,67 @@ const DashboardPageClean = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {/* Express Orders Section */}
-              {groupedOrderProductRows.expressOrders.length > 0 && (
+              {/* Loading State */}
+              {loading && orderProductRows.length === 0 ? (
+                <tr>
+                  <td 
+                    colSpan={getColumnCount()}
+                    className="px-6 py-12 text-center"
+                  >
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <p className="text-gray-500">Chargement des commandes...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : 
+              /* No Results State */
+              sortedOrderProductRows.length === 0 ? (
+                <tr>
+                  <td 
+                    colSpan={getColumnCount()}
+                    className="px-6 py-12 text-center"
+                  >
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <div className="text-gray-500">
+                        <p className="text-lg font-medium">Aucun résultat trouvé</p>
+                        {hasActiveFilters ? (
+                          <div className="mt-2 space-y-2">
+                            <p className="text-sm">Aucune commande ne correspond aux filtres sélectionnés.</p>
+                            <button
+                              onClick={clearAllFilters}
+                              className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-500 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors duration-200"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              Effacer tous les filtres
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-sm mt-2">Il n'y a aucune commande dans le système.</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
                 <>
-                  {/* Express Orders Header */}
-                  <tr className="bg-yellow-100">
-                    <td 
-                      colSpan={getColumnCount()}
-                      className="px-6 py-3 text-left text-sm font-bold text-yellow-800 uppercase tracking-wider border-l-4 border-yellow-500"
-                    >
-                      🚀 Commandes Express ({groupedOrderProductRows.expressOrders.length})
-                    </td>
-                  </tr>
+                  {/* Express Orders Section */}
+                  {groupedOrderProductRows.expressOrders.length > 0 && (
+                    <>
+                      {/* Express Orders Header */}
+                      <tr className="bg-yellow-100">
+                        <td 
+                          colSpan={getColumnCount()}
+                          className="px-6 py-3 text-left text-sm font-bold text-yellow-800 uppercase tracking-wider border-l-4 border-yellow-500"
+                        >
+                          🚀 Commandes Express ({groupedOrderProductRows.expressOrders.length})
+                        </td>
+                      </tr>
                   
                   {/* Express Orders Rows */}
                   {groupedOrderProductRows.expressOrders.map((row) => (
@@ -2584,6 +3017,8 @@ const DashboardPageClean = () => {
                   ))}
                 </>
               )}
+              </>
+              )}
             </tbody>
           </table>
         </div>
@@ -2616,6 +3051,7 @@ const DashboardPageClean = () => {
             setSelectedOrder(null)
           }}
           onSave={() => {
+            // Refresh data without resetting filters
             fetchOrders()
             fetchStats()
             setShowCreateModal(false)

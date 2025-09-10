@@ -31,22 +31,52 @@ class OrderController {
       const whereClause = {};
       const includeClause = [];
       
-      // Order-level filters
-      if (commercial) whereClause.commercial_en_charge = { [Op.like]: `%${commercial}%` };
+      // Order-level filters - handle commercial with multi-select support
+      if (commercial) {
+        const commercialValues = commercial.includes(',') ? commercial.split(',') : [commercial];
+        whereClause.commercial_en_charge = { [Op.in]: commercialValues };
+      }
       
-      // Build product-level filters
+      // Build product-level filters with multi-select support
       const productWhere = {};
-      if (atelier) productWhere.atelier_concerne = atelier;
-      if (infographe || infograph) productWhere.infograph_en_charge = { [Op.like]: `%${infographe || infograph}%` };
-      if (agent_impression) productWhere.agent_impression = { [Op.like]: `%${agent_impression}%` };
+      
+      // Handle atelier filter - support multiple values
+      if (atelier) {
+        const atelierValues = atelier.includes(',') ? atelier.split(',') : [atelier];
+        productWhere.atelier_concerne = { [Op.in]: atelierValues };
+      }
+      
+      // Handle infograph filter - support multiple values
+      if (infographe || infograph) {
+        const infographValue = infographe || infograph;
+        const infographValues = infographValue.includes(',') ? infographValue.split(',') : [infographValue];
+        productWhere.infograph_en_charge = { [Op.in]: infographValues };
+      }
+      
+      // Handle agent_impression filter - support multiple values
+      if (agent_impression) {
+        const agentValues = agent_impression.includes(',') ? agent_impression.split(',') : [agent_impression];
+        productWhere.agent_impression = { [Op.in]: agentValues };
+      }
       if (machine_impression) productWhere.machine_impression = { [Op.like]: `%${machine_impression}%` };
-      if (etape) productWhere.etape = etape;
+      
+      // Handle etape filter - support multiple values
+      if (etape) {
+        const etapeValues = etape.includes(',') ? etape.split(',') : [etape];
+        productWhere.etape = { [Op.in]: etapeValues };
+      }
+      
       if (express) productWhere.express = express;
       if (bat) productWhere.bat = bat;
       if (pack_fin_annee !== undefined && pack_fin_annee !== '') {
         productWhere.pack_fin_annee = pack_fin_annee === 'true';
       }
-      if (type_sous_traitance) productWhere.type_sous_traitance = type_sous_traitance;
+      
+      // Handle type_sous_traitance filter - support multiple values
+      if (type_sous_traitance) {
+        const sousTraitanceValues = type_sous_traitance.includes(',') ? type_sous_traitance.split(',') : [type_sous_traitance];
+        productWhere.type_sous_traitance = { [Op.in]: sousTraitanceValues };
+      }
       
       // PMS Search - only search in numero_pms field
       if (search) {
@@ -61,9 +91,10 @@ class OrderController {
         productWhere.date_limite_livraison_estimee = dateCondition;
       }
       
-      // Status filtering should be at product level since we're showing product rows
+      // Status filtering should be at product level since we're showing product rows - support multiple values
       if (statut) {
-        productWhere.statut = statut;
+        const statusValues = statut.includes(',') ? statut.split(',') : [statut];
+        productWhere.statut = { [Op.in]: statusValues };
       } else {
         // By default, exclude cancelled and delivered products for dashboard view
         productWhere.statut = { [Op.notIn]: ['annule', 'livre'] };
@@ -74,14 +105,15 @@ class OrderController {
       if (userRole === 'atelier') {
         // Atelier can see products with:
         // 1. petit format/grand format with etape 'impression' or 'finition'
-        // 2. sous-traitance with any etape
+        // 2. sous-traitance with etape 'pré-presse', 'en production', or 'controle qualité'
         productWhere[Op.or] = [
           {
             atelier_concerne: { [Op.in]: ['petit format', 'grand format'] },
             etape: { [Op.in]: ['impression', 'finition'] }
           },
           {
-            atelier_concerne: 'sous-traitance'
+            atelier_concerne: 'sous-traitance',
+            etape: { [Op.in]: ['pré-presse', 'en production', 'controle qualité'] }
           }
         ];
       } else if (userRole === 'infograph') {
@@ -400,7 +432,7 @@ class OrderController {
       if (userRole === 'atelier') {
         // Atelier can see products with:
         // 1. petit format/grand format with etape 'impression' or 'finition'
-        // 2. sous-traitance with any etape
+        // 2. sous-traitance with etape 'pré-presse', 'en production', or 'controle qualité'
         orderProductsInclude.where = {
           [Op.or]: [
             {
@@ -408,7 +440,8 @@ class OrderController {
               etape: { [Op.in]: ['impression', 'finition'] }
             },
             {
-              atelier_concerne: 'sous-traitance'
+              atelier_concerne: 'sous-traitance',
+              etape: { [Op.in]: ['pré-presse', 'en production', 'controle qualité'] }
             }
           ]
         };
@@ -621,14 +654,9 @@ class OrderController {
       // Emit real-time event for order creation
       const io = req.app.get('io');
       if (io) {
-        // Check if any products were created with etape "conception" for infograph notification
-        const productsWithConception = completeOrder.orderProducts?.filter(
-          orderProduct => orderProduct.etape === 'conception'
-        ) || [];
-        
-        if (productsWithConception.length > 0) {
-          // Send specific notifications to infograph users for each product in conception
-          productsWithConception.forEach(orderProduct => {
+        // Send notifications to infograph users for all new products
+        if (completeOrder.orderProducts && completeOrder.orderProducts.length > 0) {
+          completeOrder.orderProducts.forEach(orderProduct => {
             io.to('role-infograph').emit('orderEtapeChanged', {
               orderId: completeOrder.id,
               productId: orderProduct.product_id,
@@ -636,8 +664,8 @@ class OrderController {
               productName: orderProduct.product?.name || 'Produit non spécifié',
               client: completeOrder.client || completeOrder.clientInfo?.nom || 'Client non spécifié',
               fromEtape: null, // New creation, so from null
-              toEtape: 'conception',
-              message: 'Nouveau produit disponible en conception',
+              toEtape: orderProduct.etape || 'nouveau',
+              message: 'Nouvelle commande ajoutée',
               timestamp: new Date().toISOString()
             });
           });
@@ -969,8 +997,8 @@ class OrderController {
         // Atelier can only see orders with etape 'impression'
         whereClause.etape = { [Op.in]: ['impression'] };
       } else if (userRole === 'infograph') {
-        // Infograph can see orders with etape: conception, pré-presse, travail graphique, impression, finition
-        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
+        // Infograph can see orders with etape: conception, pré-presse, travail graphique, impression, finition, en production, controle qualité
+        whereClause.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition', 'en production', 'controle qualité'] };
       }
       // Commercial (or any other role) can see everything - no additional filtering
 
@@ -1018,19 +1046,20 @@ class OrderController {
       if (userRole === 'atelier') {
         // Atelier can see products with:
         // 1. petit format/grand format with etape 'impression' or 'finition'
-        // 2. sous-traitance with any etape
+        // 2. sous-traitance with etape 'pré-presse', 'en production', or 'controle qualité'
         productWhere[Op.or] = [
           {
             atelier_concerne: { [Op.in]: ['petit format', 'grand format'] },
             etape: { [Op.in]: ['impression', 'finition'] }
           },
           {
-            atelier_concerne: 'sous-traitance'
+            atelier_concerne: 'sous-traitance',
+            etape: { [Op.in]: ['pré-presse', 'en production', 'controle qualité'] }
           }
         ];
       } else if (userRole === 'infograph') {
-        // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition
-        productWhere.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition'] };
+        // Infograph can see products with etape: conception, pré-presse, travail graphique, impression, finition, en production, controle qualité
+        productWhere.etape = { [Op.in]: ['conception', 'pré-presse', 'travail graphique', 'impression', 'finition', 'en production', 'controle qualité'] };
       }
 
       // Query OrderProduct table to get stats at product level
@@ -1093,8 +1122,11 @@ class OrderController {
       // Build where clause for order-level filtering
       const whereClause = {};
       
-      // Order-level filters
-      if (commercial) whereClause.commercial_en_charge = { [Op.like]: `%${commercial}%` };
+      // Order-level filters - handle commercial with multi-select support
+      if (commercial) {
+        const commercialValues = commercial.includes(',') ? commercial.split(',') : [commercial];
+        whereClause.commercial_en_charge = { [Op.in]: commercialValues };
+      }
       
       // Build product-level filters for history orders
       const productWhere = {};
@@ -1115,10 +1147,20 @@ class OrderController {
         productWhere.statut = { [Op.in]: ['livre', 'annule'] };
       }
       
-      // Apply other product-level filters
+      // Apply other product-level filters with multi-select support
       if (atelier) productWhere.atelier_concerne = atelier;
-      if (infographe) productWhere.infograph_en_charge = { [Op.like]: `%${infographe}%` };
-      if (agent_impression) productWhere.agent_impression = { [Op.like]: `%${agent_impression}%` };
+      
+      // Handle infograph filter - support multiple values
+      if (infographe) {
+        const infographValues = infographe.includes(',') ? infographe.split(',') : [infographe];
+        productWhere.infograph_en_charge = { [Op.in]: infographValues };
+      }
+      
+      // Handle agent_impression filter - support multiple values
+      if (agent_impression) {
+        const agentValues = agent_impression.includes(',') ? agent_impression.split(',') : [agent_impression];
+        productWhere.agent_impression = { [Op.in]: agentValues };
+      }
       if (machine_impression) productWhere.machine_impression = { [Op.like]: `%${machine_impression}%` };
       if (etape) productWhere.etape = etape;
       if (express) productWhere.express = express;
@@ -1300,8 +1342,9 @@ class OrderController {
         return res.status(404).json({ message: 'Produit non trouvé dans cette commande' });
       }
 
-      // Store the original etape for notification checking
+      // Store the original etape and status for notification checking
       const originalEtape = orderProduct.etape;
+      const originalStatus = orderProduct.statut;
 
       // Check permissions
       const userRole = req.user.role;
@@ -1363,9 +1406,11 @@ class OrderController {
       });      // Emit real-time event for order product update
       const io = req.app.get('io');
       if (io) {
-        // Check if product etape changed from null/undefined to 'conception' for infograph notification
+        // Check if product etape changed to 'conception' or 'pré-presse' for infograph notification
         const productEtapeChangedToConception = (originalEtape === null || originalEtape === undefined) && 
                                                etape === 'conception';
+        const productEtapeChangedToPrePress = (originalEtape === null || originalEtape === undefined || originalEtape !== 'pré-presse') && 
+                                              etape === 'pré-presse';
         
         if (productEtapeChangedToConception) {
           // Send specific notification to infograph users about new order product available
@@ -1377,6 +1422,20 @@ class OrderController {
             fromEtape: originalEtape,
             toEtape: 'conception',
             message: 'Nouveau produit disponible en conception',
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        if (productEtapeChangedToPrePress) {
+          // Send specific notification to infograph users about new order product in pre-press
+          io.to('role-infograph').emit('orderEtapeChanged', {
+            orderId: parseInt(orderId),
+            productId: parseInt(productId),
+            orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
+            productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
+            fromEtape: originalEtape,
+            toEtape: 'pré-presse',
+            message: 'Nouveau produit disponible en pré-presse',
             timestamp: new Date().toISOString()
           });
         }
@@ -1394,6 +1453,35 @@ class OrderController {
             fromEtape: originalEtape,
             toEtape: 'impression',
             message: 'Nouveau produit prêt pour impression',
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Check if product status changed TO 'termine' for commercial notification
+        const productStatusChangedToTermine = originalStatus !== 'termine' && statut === 'termine';
+        
+        if (productStatusChangedToTermine) {
+          // Fetch complete order with client info for notification
+          const orderWithClient = await Order.findByPk(orderId, {
+            include: [
+              {
+                model: Client,
+                as: 'clientInfo',
+                attributes: ['id', 'nom', 'code_client']
+              }
+            ]
+          });
+          
+          // Send specific notification to commercial users about completed order product
+          io.to('role-commercial').emit('orderStatusChanged', {
+            orderId: parseInt(orderId),
+            productId: parseInt(productId),
+            orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
+            productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
+            client: orderWithClient?.client || orderWithClient?.clientInfo?.nom || 'Client non spécifié',
+            fromStatus: originalStatus,
+            toStatus: 'termine',
+            message: 'Produit terminé',
             timestamp: new Date().toISOString()
           });
         }

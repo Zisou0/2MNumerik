@@ -20,12 +20,14 @@ export const useAtelierNotifications = () => {
       // Only handle impression notifications for atelier users
       if (etapeChangeData.toEtape === 'impression') {
         // Create notification for the atelier user
+        const message = `${etapeChangeData.orderNumber} - ${etapeChangeData.client}${etapeChangeData.productName ? ` | ${etapeChangeData.productName}` : ''} prêt pour impression`;
+        
         addNotification({
           title: '🖨️ Nouveau travail d\'impression !',
-          message: `${etapeChangeData.orderNumber} - ${etapeChangeData.client}${etapeChangeData.productName ? ` | ${etapeChangeData.productName}` : ''} est prêt pour impression`,
-          priority: 'high', // Use high priority for new work availability
+          message: message,
+          priority: 'atelier', // Use specific atelier priority for the pleasant sound
           orderNumber: etapeChangeData.orderNumber,
-          type: 'etape_change_impression',
+          type: 'impression_ready',
           duration: 1800000 // 30 minutes
         });
       }

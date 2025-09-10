@@ -134,11 +134,12 @@ export const usePriorityNotifications = (orders) => {
     if (!orders || orders.length === 0) return;
 
     orders.forEach(order => {
-      const currentPriority = getPriorityLevel(order); // Use the correct priority function
-      const previousPriority = previousOrdersRef.current[order.id]?.priority;
-      const previousStatus = previousOrdersRef.current[order.id]?.status;
+      const currentPriority = getPriorityLevel(order);
+      const previousEntry = previousOrdersRef.current[order.id];
+      const previousPriority = previousEntry?.priority;
+      const previousStatus = previousEntry?.status;
 
-      // Check for priority level changes (color changes)
+      // Check for priority level changes (only for orders we were already tracking)
       if (previousPriority && previousPriority !== currentPriority) {
         const priorityMessages = {
           overdue: '🚨 URGENT - Échéance dépassée !',
@@ -159,7 +160,8 @@ export const usePriorityNotifications = (orders) => {
         });
       }
 
-      // Check for status changes that might affect priority
+      // Check for status changes that might affect priority - COMMENTED OUT
+      /*
       if (previousStatus && previousStatus !== order.statut) {
         // Notify on status changes to urgent priorities
         if (currentPriority === 'overdue' || currentPriority === 'urgent' || currentPriority === 'high') {
@@ -183,6 +185,7 @@ export const usePriorityNotifications = (orders) => {
           });
         }
       }
+      */
 
       // Update the reference with current values
       previousOrdersRef.current[order.id] = {
@@ -192,12 +195,14 @@ export const usePriorityNotifications = (orders) => {
       };
     });
 
-    // Clean up references for orders that no longer exist
+    // Clean up references for orders that no longer exist (completed or deleted)
     const currentOrderIds = new Set(orders.map(order => order.id));
     Object.keys(previousOrdersRef.current).forEach(orderId => {
-      if (!currentOrderIds.has(parseInt(orderId))) {
+      const orderIdInt = parseInt(orderId);
+      if (!currentOrderIds.has(orderIdInt)) {
+        // Order no longer exists in the current dataset, remove from tracking
         delete previousOrdersRef.current[orderId];
-        // Also clear any overdue reminders for deleted orders
+        // Also clear any overdue reminders for deleted/completed orders
         if (overdueReminderRef.current[orderId]) {
           clearInterval(overdueReminderRef.current[orderId]);
           delete overdueReminderRef.current[orderId];

@@ -18,12 +18,14 @@ export const useInfographNotifications = () => {
     // Subscribe to the orderEtapeChanged event
     const unsubscribeEtapeChanged = subscribe('orderEtapeChanged', (etapeChangeData) => {
       // Create notification for the infograph user
+      const message = `${etapeChangeData.orderNumber} - ${etapeChangeData.client}${etapeChangeData.productName ? ` | ${etapeChangeData.productName}` : ''}`;
+      
       addNotification({
         title: '🎨 Nouvelle commande disponible !',
-        message: `${etapeChangeData.orderNumber} - ${etapeChangeData.client}${etapeChangeData.productName ? ` | ${etapeChangeData.productName}` : ''} est maintenant en étape conception`,
-        priority: 'high', // Use high priority for new work availability
+        message: message,
+        priority: 'normal', // Use normal priority for a simple, pleasant sound
         orderNumber: etapeChangeData.orderNumber,
-        type: 'etape_change_conception',
+        type: 'new_order_product',
         duration: 1800000 // 30 minutes
       });
     });

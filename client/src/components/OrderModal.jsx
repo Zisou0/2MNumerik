@@ -399,7 +399,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       infograph_en_charge: '',
       agent_impression: '',
       date_limite_livraison_estimee: orderFormData.date_limite_livraison_attendue || '',
-      etape: 'pre-press',
+      etape: 'pré-presse',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
       bat: '',
@@ -423,13 +423,13 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     // Auto-set etape based on atelier_concerne
     if (field === 'atelier_concerne') {
       if (value === 'petit format' || value === 'grand format') {
-        updated[index] = { ...updated[index], etape: 'pre-press' }
+        updated[index] = { ...updated[index], etape: 'pré-presse' }
       } else if (value === 'service crea') {
         // For service crea, don't auto-set etape, let user choose between 'conception' and 'travail graphique'
         updated[index] = { ...updated[index], etape: '' }
       } else if (value === 'sous-traitance') {
-        // For sous-traitance, remove etape completely
-        updated[index] = { ...updated[index], etape: '' }
+        // For sous-traitance, set default etape to pré-presse
+        updated[index] = { ...updated[index], etape: 'pré-presse' }
       }
       
       // Clear product search when atelier changes
@@ -465,7 +465,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   const getEtapeOptionsForAtelier = (atelierConcerne) => {
     if (atelierConcerne === 'petit format' || atelierConcerne === 'grand format') {
       return [
-        { value: 'pre-press', label: 'Pre-press' },
+        { value: 'pré-presse', label: 'Pré-presse' },
         { value: 'impression', label: 'Impression' },
         { value: 'finition', label: 'Finition' }
       ]
@@ -475,7 +475,11 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         { value: 'travail graphique', label: 'Travail graphique' }
       ]
     } else if (atelierConcerne === 'sous-traitance') {
-      return [] // No etape for sous-traitance
+      return [
+        { value: 'pré-presse', label: 'Pré-presse' },
+        { value: 'en production', label: 'En production' },
+        { value: 'controle qualité', label: 'Contrôle qualité' }
+      ]
     }
     return etapeOptions.map(etape => ({ value: etape, label: etape }))
   }
@@ -1443,40 +1447,36 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                         <div>
                                           <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Étape
-                                            {product.atelier_concerne === 'sous-traitance' && (
-                                              <span className="text-gray-500 text-sm ml-2">(Non applicable pour sous-traitance)</span>
-                                            )}
                                           </label>
-                                          {product.atelier_concerne === 'sous-traitance' ? (
-                                            <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
-                                              Aucune étape requise
-                                            </div>
-                                          ) : (
-                                            <select
-                                              value={product.etape}
-                                              onChange={(e) => updateProduct(index, 'etape', e.target.value)}
-                                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                            >
-                                              <option value="">
-                                                {!product.atelier_concerne 
-                                                  ? "Sélectionnez d'abord un atelier" 
-                                                  : "Sélectionner une étape"}
+                                          <select
+                                            value={product.etape}
+                                            onChange={(e) => updateProduct(index, 'etape', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                          >
+                                            <option value="">
+                                              {!product.atelier_concerne 
+                                                ? "Sélectionnez d'abord un atelier" 
+                                                : "Sélectionner une étape"}
+                                            </option>
+                                            {getEtapeOptionsForAtelier(product.atelier_concerne).map(option => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
                                               </option>
-                                              {getEtapeOptionsForAtelier(product.atelier_concerne).map(option => (
-                                                <option key={option.value} value={option.value}>
-                                                  {option.label}
-                                                </option>
-                                              ))}
-                                            </select>
-                                          )}
+                                            ))}
+                                          </select>
                                           {(product.atelier_concerne === 'petit format' || product.atelier_concerne === 'grand format') && !product.etape && (
                                             <p className="mt-1 text-sm text-blue-600">
-                                              Étape par défaut: "Pre-press". Vous pouvez changer vers "Impression" ou "Finition" selon l'avancement.
+                                              Étape par défaut: "Pré-presse". Vous pouvez changer vers "Impression" ou "Finition" selon l'avancement.
                                             </p>
                                           )}
                                           {product.atelier_concerne === 'service crea' && !product.etape && (
                                             <p className="mt-1 text-sm text-orange-600">
                                               Veuillez choisir entre "Conception" et "Travail graphique"
+                                            </p>
+                                          )}
+                                          {product.atelier_concerne === 'sous-traitance' && !product.etape && (
+                                            <p className="mt-1 text-sm text-purple-600">
+                                              Étape par défaut: "Pré-presse". Vous pouvez changer vers "En production" ou "Contrôle qualité" selon l'avancement.
                                             </p>
                                           )}
                                         </div>

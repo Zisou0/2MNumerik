@@ -46,10 +46,22 @@ export const NotificationProvider = ({ children }) => {
         gap: 0.15
       },
       normal: {
-        frequencies: [500], // Single beep
-        volume: 0.5,
-        duration: 0.15,
-        gap: 0.2
+        frequencies: [600, 800], // Pleasant two-tone chime
+        volume: 0.3,
+        duration: 0.12,
+        gap: 0.08
+      },
+      atelier: {
+        frequencies: [600, 800], // Same pleasant two-tone chime as normal
+        volume: 0.3,
+        duration: 0.12,
+        gap: 0.08
+      },
+      commercial: {
+        frequencies: [600, 800], // Same pleasant two-tone chime as normal and atelier
+        volume: 0.3,
+        duration: 0.12,
+        gap: 0.08
       }
     };
 
