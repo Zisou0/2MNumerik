@@ -3,9 +3,10 @@ import { useAuth } from '../contexts/AuthContext'
 import Button from './ButtonComponent'
 import ProgressStepper from './ProgressStepper'
 import { apiCall } from '../utils/api'
-const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, etapeOptions }) => {
+const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, etapeOptions, selectedOrderProduct = null }) => {
   const { user } = useAuth()
   const [availableUsers, setAvailableUsers] = useState([])
+  const [showAllProducts, setShowAllProducts] = useState(!selectedOrderProduct)
 
   // Fetch users to map agent IDs to usernames
   useEffect(() => {
@@ -131,14 +132,38 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
 
   const visibleViewFields = getVisibleViewFields()
 
-  // Define the steps for the progress stepper based on etapeOptions (excluding conception and travail graphique)
-  const steps = etapeOptions
-    .filter(etape => etape !== 'conception' && etape !== 'travail graphique')
-    .map(etape => ({
-      key: etape,
-      label: etape === 'pré-presse' ? 'Pré-presse' : 
-             etape.charAt(0).toUpperCase() + etape.slice(1)
-    }));
+  // Helper function to get steps based on atelier_concerne
+  const getStepsForAtelier = (atelierConcerne) => {
+    if (!atelierConcerne) return []
+    
+    const atelier = atelierConcerne.toLowerCase()
+    
+    if (atelier === 'petit format' || atelier === 'grand format') {
+      return [
+        { key: 'pré-presse', label: 'Pré-presse' },
+        { key: 'impression', label: 'Impression' },
+        { key: 'finition', label: 'Finition' }
+      ]
+    } else if (atelier === 'service crea') {
+      return [
+        { key: 'conception', label: 'Conception' },
+        { key: 'travail graphique', label: 'Travail graphique' }
+      ]
+    } else if (atelier === 'sous-traitance') {
+      return [
+        { key: 'pré-presse', label: 'Pré-presse' },
+        { key: 'en production', label: 'En production' },
+        { key: 'controle qualité', label: 'Contrôle qualité' }
+      ]
+    }
+    
+    return []
+  }
+
+  // Only show progress stepper for specific product view
+  const shouldShowProgressStepper = selectedOrderProduct && !showAllProducts
+  const steps = shouldShowProgressStepper ? getStepsForAtelier(selectedOrderProduct.atelier_concerne) : []
+  const currentEtape = shouldShowProgressStepper ? selectedOrderProduct.etape : null
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in">
@@ -160,10 +185,13 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold tracking-tight">
-                    Détails de la commande
+                    {selectedOrderProduct ? 'Détails du produit' : 'Détails de la commande'}
                   </h3>
                   <p className="text-indigo-100 text-sm mt-1 font-medium">
-                    Commande {order.numero_pms}
+                    {selectedOrderProduct 
+                      ? `Produit ${selectedOrderProduct.productInfo?.name || selectedOrderProduct.product?.name || 'sans nom'} - Commande ${order.numero_pms}`
+                      : `Commande ${order.numero_pms}`
+                    }
                   </p>
                 </div>
               </div>
@@ -191,8 +219,10 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
             </div>
           </div>
 
-          {/* Progress Stepper */}
-          <ProgressStepper currentStep={order.etape} steps={steps} />
+          {/* Progress Stepper - Only for specific product view */}
+          {shouldShowProgressStepper && steps.length > 0 && (
+            <ProgressStepper currentStep={currentEtape} steps={steps} />
+          )}
 
           {/* Content */}
           <div className="p-8 space-y-8">
@@ -572,46 +602,97 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xl font-bold text-gray-800">Détails des produits</h4>
+                    <h4 className="text-xl font-bold text-gray-800">
+                      {(selectedOrderProduct && !showAllProducts) ? 'Détails du produit sélectionné' : 'Détails des produits'}
+                    </h4>
                     <p className="text-sm text-gray-600 mt-1">
-                      {order.orderProducts?.length || 0} produit{order.orderProducts?.length > 1 ? 's' : ''} dans cette commande
+                      {(selectedOrderProduct && !showAllProducts)
+                        ? `Produit: ${selectedOrderProduct.productInfo?.name || selectedOrderProduct.product?.name || 'Produit sans nom'}`
+                        : `${order.orderProducts?.length || 0} produit${order.orderProducts?.length > 1 ? 's' : ''} dans cette commande`
+                      }
                     </p>
                   </div>
                 </div>
                 
-                {/* Summary stats */}
-                {order.orderProducts && order.orderProducts.length > 0 && (
-                  <div className="flex items-center gap-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-emerald-600">
-                        {order.orderProducts.reduce((sum, op) => sum + (op.quantity || 0), 0)}
+                <div className="flex items-center gap-4">
+                  {/* Toggle button when a specific product was selected */}
+                  {selectedOrderProduct && order.orderProducts && order.orderProducts.length > 1 && (
+                    <button
+                      onClick={() => setShowAllProducts(!showAllProducts)}
+                      className="flex items-center gap-2 bg-white/80 hover:bg-white px-4 py-2 rounded-xl transition-all duration-200 border border-emerald-300 text-emerald-700 font-medium shadow-md hover:shadow-lg"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAllProducts ? "M15 12a3 3 0 11-6 0 3 3 0 016 0z" : "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"} />
+                      </svg>
+                      {showAllProducts ? 'Voir produit sélectionné' : 'Voir tous les produits'}
+                    </button>
+                  )}
+                  
+                  {/* Summary stats */}
+                  {showAllProducts && order.orderProducts && order.orderProducts.length > 0 && (
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-emerald-600">
+                          {order.orderProducts.reduce((sum, op) => sum + (op.quantity || 0), 0)}
+                        </div>
+                        <div className="text-xs text-gray-600 font-medium">Quantité totale</div>
                       </div>
-                      <div className="text-xs text-gray-600 font-medium">Quantité totale</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">
-                        {Math.round(order.orderProducts.reduce((sum, op) => sum + (op.estimated_work_time_minutes || 0), 0) / 60 * 10) / 10}h
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {Math.round(order.orderProducts.reduce((sum, op) => sum + (op.estimated_work_time_minutes || 0), 0) / 60 * 10) / 10}h
+                        </div>
+                        <div className="text-xs text-gray-600 font-medium">Temps estimé</div>
                       </div>
-                      <div className="text-xs text-gray-600 font-medium">Temps estimé</div>
                     </div>
-                  </div>
-                )}
+                  )}
+                  
+                  {/* Single product stats */}
+                  {!showAllProducts && selectedOrderProduct && (
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-emerald-600">
+                          {selectedOrderProduct.quantity || 0}
+                        </div>
+                        <div className="text-xs text-gray-600 font-medium">Quantité</div>
+                      </div>
+                      {selectedOrderProduct.estimated_work_time_minutes && (
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-600">
+                            {Math.round(selectedOrderProduct.estimated_work_time_minutes / 60 * 10) / 10}h
+                          </div>
+                          <div className="text-xs text-gray-600 font-medium">Temps estimé</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="space-y-6">
-                {order.orderProducts && order.orderProducts.length > 0 ? (
-                  order.orderProducts.map((orderProduct, index) => (
+                {(() => {
+                  // Determine which products to display
+                  const productsToDisplay = (!showAllProducts && selectedOrderProduct)
+                    ? [selectedOrderProduct] 
+                    : (order.orderProducts && order.orderProducts.length > 0 ? order.orderProducts : []);
+                  
+                  return productsToDisplay.length > 0 ? (
+                    productsToDisplay.map((orderProduct, index) => (
                     <div key={index} className="bg-white rounded-xl border border-emerald-200/50 shadow-lg overflow-hidden transform transition-all duration-200 hover:shadow-xl">
                       {/* Product Header */}
                       <div className="bg-gradient-to-r from-emerald-100 via-green-100 to-emerald-100 px-6 py-4 border-b border-emerald-200/50">
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                              {index + 1}
+                              {(!showAllProducts && selectedOrderProduct) ? '★' : index + 1}
                             </div>
                             <div>
-                              <h5 className="text-xl font-bold text-gray-800">
+                              <h5 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                                 {orderProduct.productInfo?.name || orderProduct.product?.name || 'Produit sans nom'}
+                                {(!showAllProducts && selectedOrderProduct) && (
+                                  <span className="px-3 py-1 bg-emerald-600 text-white text-sm font-bold rounded-full shadow-md">
+                                    Sélectionné
+                                  </span>
+                                )}
                               </h5>
                               <p className="text-sm text-gray-600 mt-1">
                                 ID Produit: #{orderProduct.product_id} • ID Commande Produit: #{orderProduct.id}
@@ -994,7 +1075,8 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
                       <p className="text-gray-500">Cette commande ne contient aucun produit pour le moment.</p>
                     </div>
                   </div>
-                )}
+                );
+                })()}
               </div>
             </div>
 

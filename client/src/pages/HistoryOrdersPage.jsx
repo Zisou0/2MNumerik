@@ -15,6 +15,7 @@ const HistoryOrdersPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [selectedOrderProduct, setSelectedOrderProduct] = useState(null)
   const [showViewModal, setShowViewModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [orderToDelete, setOrderToDelete] = useState(null)
@@ -487,7 +488,13 @@ const HistoryOrdersPage = () => {
       // Fetch the complete order with all products from the API
       const response = await orderAPI.getOrder(orderProductRow.orderId)
       if (response && response.order) {
+        // Find the specific order product that was clicked
+        const clickedOrderProduct = response.order.orderProducts?.find(
+          op => op.id === orderProductRow.orderProductId
+        )
+        
         setSelectedOrder(response.order)
+        setSelectedOrderProduct(clickedOrderProduct || null)
         setShowViewModal(true)
       } else {
         console.error('Failed to fetch order details')
@@ -1155,9 +1162,11 @@ const HistoryOrdersPage = () => {
       {showViewModal && selectedOrder && (
         <OrderViewModal
           order={selectedOrder}
+          selectedOrderProduct={selectedOrderProduct}
           onClose={() => {
             setShowViewModal(false)
             setSelectedOrder(null)
+            setSelectedOrderProduct(null)
           }}
           formatDate={formatDate}
           getStatusBadge={getStatusBadge}

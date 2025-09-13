@@ -121,6 +121,10 @@ export const orderAPI = {
     body: JSON.stringify(productData),
   }),
   
+  deleteOrderProduct: (orderId, productId) => apiCall(`/orders/${orderId}/products/${productId}`, {
+    method: 'DELETE',
+  }),
+  
   deleteOrder: (id) => apiCall(`/orders/${id}`, {
     method: 'DELETE',
   }),

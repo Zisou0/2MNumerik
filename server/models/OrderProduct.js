@@ -86,7 +86,7 @@ module.exports = (sequelize) => {
       comment: 'Commentaires spécifiques à ce produit'
     },
     bat: {
-      type: DataTypes.ENUM('avec', 'sans'),
+      type: DataTypes.ENUM('avec', 'sans', 'valider'),
       allowNull: true,
       comment: 'BAT (Bon à tirer) pour ce produit spécifique'
     },

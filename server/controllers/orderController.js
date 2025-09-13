@@ -521,10 +521,10 @@ class OrderController {
           });
         }
 
-        if (product.bat !== undefined && product.bat !== '' && !['avec', 'sans'].includes(product.bat)) {
+        if (product.bat !== undefined && product.bat !== '' && !['avec', 'sans', 'valider'].includes(product.bat)) {
           await transaction.rollback();
           return res.status(400).json({ 
-            message: 'Le champ BAT doit être "avec" ou "sans"' 
+            message: 'Le champ BAT doit être "avec", "sans" ou "valider"' 
           });
         }
 
@@ -1529,6 +1529,116 @@ class OrderController {
     } catch (error) {
       await transaction.rollback();
       console.error('Update order product error:', error);
+      res.status(500).json({ message: 'Erreur serveur' });
+    }
+  }
+
+  // Delete individual order product
+  static async deleteOrderProduct(req, res) {
+    const transaction = await Order.sequelize.transaction();
+    
+    try {
+      const { orderId, productId } = req.params;
+      
+      // Find the order product
+      const orderProduct = await OrderProduct.findOne({
+        where: {
+          order_id: orderId,
+          product_id: productId
+        },
+        transaction
+      });
+
+      if (!orderProduct) {
+        await transaction.rollback();
+        return res.status(404).json({ message: 'Produit non trouvé dans cette commande' });
+      }
+
+      // Check permissions - only admin and commercial can delete order products
+      const userRole = req.user.role;
+      if (userRole !== 'admin' && userRole !== 'commercial') {
+        await transaction.rollback();
+        return res.status(403).json({ message: 'Vous n\'êtes pas autorisé à supprimer des produits de commande' });
+      }
+
+      // Delete the order product (finitions will be deleted automatically due to CASCADE)
+      await orderProduct.destroy({ transaction });
+
+      // Check if this was the last product in the order
+      const remainingProducts = await OrderProduct.count({
+        where: { order_id: orderId },
+        transaction
+      });
+
+      if (remainingProducts === 0) {
+        // If no products remain, delete the entire order
+        const order = await Order.findByPk(orderId, { transaction });
+        if (order) {
+          await order.destroy({ transaction });
+          
+          await transaction.commit();
+
+          // Emit real-time event for order deletion
+          const io = req.app.get('io');
+          if (io) {
+            io.emit('orderDeleted', { orderId: parseInt(orderId) });
+          }
+
+          return res.json({
+            message: 'Produit supprimé avec succès. La commande a été supprimée car elle ne contenait plus de produits.',
+            orderDeleted: true
+          });
+        }
+      }
+
+      await transaction.commit();
+
+      // Fetch the complete order with remaining products for real-time update
+      const completeOrder = await Order.findByPk(orderId, {
+        include: [
+          {
+            model: OrderProduct,
+            as: 'orderProducts',
+            include: [
+              {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name', 'estimated_creation_time']
+              },
+              {
+                model: OrderProductFinition,
+                as: 'orderProductFinitions',
+                include: [
+                  {
+                    model: Finition,
+                    as: 'finition',
+                    attributes: ['id', 'name', 'description']
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            model: Client,
+            as: 'clientInfo',
+            attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client']
+          }
+        ]
+      });
+
+      // Emit real-time event for order update
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('orderUpdated', completeOrder);
+      }
+
+      res.json({
+        message: 'Produit supprimé avec succès',
+        orderDeleted: false
+      });
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Delete order product error:', error);
       res.status(500).json({ message: 'Erreur serveur' });
     }
   }

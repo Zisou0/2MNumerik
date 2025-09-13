@@ -107,10 +107,11 @@ const DashboardPageClean = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [selectedOrderProduct, setSelectedOrderProduct] = useState(null)
   
   // Delete confirmation
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [orderToDelete, setOrderToDelete] = useState(null)
+  const [itemToDelete, setItemToDelete] = useState(null) // Changed from orderToDelete to itemToDelete
   
   // Enhanced Filter System with persistence and multi-select support
   const [filters, setFilters] = useState(() => {
@@ -632,7 +633,7 @@ const DashboardPageClean = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleDeleteOrder(row.orderId)
+                  handleDeleteOrder(row)
                 }}
                 className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-2 py-1 rounded text-xs"
               >
@@ -699,7 +700,7 @@ const DashboardPageClean = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleDeleteOrder(row.orderId)
+                  handleDeleteOrder(row)
                 }}
                 className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-2 py-1 rounded text-xs"
               >
@@ -2058,7 +2059,13 @@ const DashboardPageClean = () => {
       // Fetch the complete order with all products from the API
       const response = await orderAPI.getOrder(orderProductRow.orderId)
       if (response && response.order) {
+        // Find the specific order product that was clicked
+        const clickedOrderProduct = response.order.orderProducts?.find(
+          op => op.id === orderProductRow.orderProductId
+        )
+        
         setSelectedOrder(response.order)
+        setSelectedOrderProduct(clickedOrderProduct || null)
         setShowViewModal(true)
       } else {
         console.error('Failed to fetch order details')
@@ -2093,31 +2100,55 @@ const DashboardPageClean = () => {
     }
   }
 
-  const handleDeleteOrder = async (orderId) => {
-    setOrderToDelete(orderId)
+  const handleDeleteOrder = async (orderProductRow) => {
+    // Set the item to delete with both order and product information
+    setItemToDelete({
+      type: 'orderProduct',
+      orderId: orderProductRow.orderId,
+      productId: orderProductRow.product_id,
+      productName: orderProductRow.product_name,
+      clientName: orderProductRow.client_info
+    })
     setShowDeleteDialog(true)
   }
 
   const confirmDeleteOrder = async () => {
-    if (orderToDelete) {
+    if (itemToDelete) {
       try {
-        await orderAPI.deleteOrder(orderToDelete)
-        // Refresh data without resetting filters
-        fetchOrders()
+        if (itemToDelete.type === 'orderProduct') {
+          // Delete specific order product
+          const response = await orderAPI.deleteOrderProduct(itemToDelete.orderId, itemToDelete.productId)
+          
+          if (response.orderDeleted) {
+            // Entire order was deleted because it was the last product
+            setOrderProductRows(prev => prev.filter(row => row.orderId !== itemToDelete.orderId))
+          } else {
+            // Only the specific product was deleted
+            setOrderProductRows(prev => prev.filter(row => 
+              !(row.orderId === itemToDelete.orderId && row.product_id === itemToDelete.productId)
+            ))
+          }
+        } else {
+          // Delete entire order (fallback for full order deletion)
+          await orderAPI.deleteOrder(itemToDelete.orderId)
+          setOrderProductRows(prev => prev.filter(row => row.orderId !== itemToDelete.orderId))
+        }
+        
+        // Refresh stats
         fetchStats()
         setShowDeleteDialog(false)
-        setOrderToDelete(null)
+        setItemToDelete(null)
       } catch (err) {
         setError('Erreur lors de la suppression')
         setShowDeleteDialog(false)
-        setOrderToDelete(null)
+        setItemToDelete(null)
       }
     }
   }
 
   const cancelDeleteOrder = () => {
     setShowDeleteDialog(false)
-    setOrderToDelete(null)
+    setItemToDelete(null)
   }
 
   // Effects - Load data when filters change
@@ -2844,7 +2875,7 @@ const DashboardPageClean = () => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    handleDeleteOrder(row.orderId)
+                                    handleDeleteOrder(row)
                                   }}
                                   className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-2 py-1 rounded text-xs"
                                 >
@@ -3002,7 +3033,7 @@ const DashboardPageClean = () => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    handleDeleteOrder(row.orderId)
+                                    handleDeleteOrder(row)
                                   }}
                                   className="text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-2 py-1 rounded text-xs"
                                 >
@@ -3028,9 +3059,11 @@ const DashboardPageClean = () => {
       {showViewModal && selectedOrder && (
         <OrderViewModal
           order={selectedOrder}
+          selectedOrderProduct={selectedOrderProduct}
           onClose={() => {
             setShowViewModal(false)
             setSelectedOrder(null)
+            setSelectedOrderProduct(null)
           }}
           onEdit={() => {
             setShowViewModal(false)
@@ -3071,7 +3104,11 @@ const DashboardPageClean = () => {
         onClose={cancelDeleteOrder}
         onConfirm={confirmDeleteOrder}
         title="Confirmer la suppression"
-        message="Êtes-vous sûr de vouloir supprimer cette commande ? Cette action est irréversible."
+        message={
+          itemToDelete ? 
+            `Êtes-vous sûr de vouloir supprimer le produit "${itemToDelete.productName}" de la commande pour ${itemToDelete.clientName} ? Cette action est irréversible.` 
+            : "Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible."
+        }
         confirmText="Supprimer"
         cancelText="Annuler"
         type="danger"

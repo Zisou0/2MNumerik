@@ -770,7 +770,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       }
 
       if (visibleFields.productLevel.bat && !product.bat) {
-        setError(`Produit ${i + 1}: Veuillez sélectionner l'option BAT (avec/sans)`)
+        setError(`Produit ${i + 1}: Veuillez sélectionner l'option BAT (avec/sans/valider)`)
         setLoading(false)
         return
       }

@@ -14,7 +14,6 @@ const AtelierTasksPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [stats, setStats] = useState({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
@@ -24,11 +23,6 @@ const AtelierTasksPage = () => {
     search: '',
     status: '',
     atelier_type: ''
-  });
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    totalTasks: 0
   });
 
   const statusOptions = [
@@ -44,16 +38,14 @@ const AtelierTasksPage = () => {
   ];
 
   const atelierTypeOptions = [
-    { value: 'type_extern', label: 'Type Extern' },
-    { value: 'type_intern', label: 'Type Intern' }
+    { value: 'type_extern', label: 'Type Externe' },
+    { value: 'type_intern', label: 'Type Interne' }
   ];
 
-  const fetchTasks = async (page = 1) => {
+  const fetchTasks = async () => {
     try {
       setLoading(true);
       const params = { 
-        page, 
-        limit: 10, 
         ...filters
       };
       
@@ -66,20 +58,10 @@ const AtelierTasksPage = () => {
       
       const response = await atelierTaskAPI.getTasks(params);
       setTasks(response.tasks);
-      setPagination(response.pagination);
     } catch (err) {
       setError('Erreur lors du chargement des tâches');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchStats = async () => {
-    try {
-      const response = await atelierTaskAPI.getTaskStats();
-      setStats(response.stats);
-    } catch (err) {
-      console.error('Erreur lors du chargement des statistiques:', err);
     }
   };
 
@@ -94,7 +76,6 @@ const AtelierTasksPage = () => {
 
   useEffect(() => {
     fetchTasks();
-    fetchStats();
     fetchAtelierUsers();
   }, [filters]);
 
@@ -117,8 +98,7 @@ const AtelierTasksPage = () => {
     if (taskToDelete) {
       try {
         await atelierTaskAPI.deleteTask(taskToDelete);
-        fetchTasks(pagination.currentPage);
-        fetchStats();
+        fetchTasks();
         setShowDeleteDialog(false);
         setTaskToDelete(null);
       } catch (err) {
@@ -137,8 +117,7 @@ const AtelierTasksPage = () => {
   const handleStatusUpdate = async (taskId, newStatus) => {
     try {
       await atelierTaskAPI.updateTaskStatus(taskId, { status: newStatus });
-      fetchTasks(pagination.currentPage);
-      fetchStats();
+      fetchTasks();
     } catch (err) {
       setError('Erreur lors de la mise à jour du statut');
     }
@@ -150,8 +129,7 @@ const AtelierTasksPage = () => {
         started_at: new Date().toISOString(),
         status: 'in_progress'
       });
-      fetchTasks(pagination.currentPage);
-      fetchStats();
+      fetchTasks();
     } catch (err) {
       setError('Erreur lors du démarrage de la tâche');
     }
@@ -169,8 +147,7 @@ const AtelierTasksPage = () => {
           completed_at: new Date().toISOString(),
           status: 'completed'
         });
-        fetchTasks(pagination.currentPage);
-        fetchStats();
+        fetchTasks();
         setShowCompleteDialog(false);
         setTaskToComplete(null);
       } catch (err) {
@@ -199,6 +176,17 @@ const AtelierTasksPage = () => {
   const getAtelierTypeLabel = (type) => {
     const option = atelierTypeOptions.find(opt => opt.value === type);
     return option ? option.label : type;
+  };
+
+  const getAtelierTypeColor = (type) => {
+    switch (type) {
+      case 'type_extern':
+        return 'bg-orange-100 text-orange-800';
+      case 'type_intern':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
   };
 
   const formatDate = (dateString) => {
@@ -230,34 +218,6 @@ const AtelierTasksPage = () => {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Gestion des tâches d'atelier</h1>
         
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-blue-600">{stats.total || 0}</div>
-            <div className="text-sm text-gray-600">Total</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-yellow-600">{stats.pending || 0}</div>
-            <div className="text-sm text-gray-600">En attente</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-blue-600">{stats.in_progress || 0}</div>
-            <div className="text-sm text-gray-600">En cours</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-green-600">{stats.completed || 0}</div>
-            <div className="text-sm text-gray-600">Terminé</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-red-600">{stats.cancelled || 0}</div>
-            <div className="text-sm text-gray-600">Annulé</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-red-600">{stats.overdue || 0}</div>
-            <div className="text-sm text-gray-600">En retard</div>
-          </div>
-        </div>
-
         {/* Filters and Actions */}
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
@@ -338,6 +298,9 @@ const AtelierTasksPage = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type de tâche
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Tâche
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -353,9 +316,6 @@ const AtelierTasksPage = () => {
                     Statut
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type de tâche
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -363,6 +323,11 @@ const AtelierTasksPage = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {tasks.map((task) => (
                   <tr key={task.id} className={isOverdue(task.due_date, task.status) ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                    <td className="px-6 py-1 whitespace-nowrap">
+                      <span className={`text-xs font-semibold rounded-full px-2 py-1 ${getAtelierTypeColor(task.atelier_type)}`}>
+                        {getAtelierTypeLabel(task.atelier_type)}
+                      </span>
+                    </td>
                     <td className="px-6 py-1">
                       <div>
                         <div className="text-sm font-medium text-gray-900">{task.title}</div>
@@ -428,9 +393,6 @@ const AtelierTasksPage = () => {
                         {getStatusLabel(task.status)}
                       </span>
                     </td>
-                    <td className="px-6 py-1 whitespace-nowrap text-sm text-gray-900">
-                      {getAtelierTypeLabel(task.atelier_type)}
-                    </td>
                     <td className="px-6 py-1 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
                         onClick={() => handleEditTask(task)}
@@ -456,56 +418,6 @@ const AtelierTasksPage = () => {
               </tbody>
             </table>
           </div>
-
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => fetchTasks(pagination.currentPage - 1)}
-                  disabled={pagination.currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Précédent
-                </button>
-                <button
-                  onClick={() => fetchTasks(pagination.currentPage + 1)}
-                  disabled={pagination.currentPage === pagination.totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Suivant
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Affichage <span className="font-medium">{((pagination.currentPage - 1) * 10) + 1}</span> à{' '}
-                    <span className="font-medium">
-                      {Math.min(pagination.currentPage * 10, pagination.totalTasks)}
-                    </span>{' '}
-                    sur <span className="font-medium">{pagination.totalTasks}</span> tâches
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    {Array.from({ length: pagination.totalPages }, (_, i) => (
-                      <button
-                        key={i + 1}
-                        onClick={() => fetchTasks(i + 1)}
-                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                          pagination.currentPage === i + 1
-                            ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
-                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                        }`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -549,8 +461,7 @@ const AtelierTasksPage = () => {
           task={selectedTask}
           atelierUsers={atelierUsers}
           onSave={() => {
-            fetchTasks(pagination.currentPage);
-            fetchStats();
+            fetchTasks();
             setShowCreateModal(false);
             setShowEditModal(false);
             setSelectedTask(null);
@@ -571,8 +482,6 @@ const TaskModal = ({ isOpen, onClose, task, atelierUsers, onSave, statusOptions,
     assigned_to: [],
     status: 'pending',
     atelier_type: 'type_extern',
-    start_date: '',
-    end_date: '',
     notes: ''
   });
   const [saving, setSaving] = useState(false);
@@ -586,8 +495,6 @@ const TaskModal = ({ isOpen, onClose, task, atelierUsers, onSave, statusOptions,
         assigned_to: Array.isArray(task.assigned_to) ? task.assigned_to : (task.assigned_to ? [task.assigned_to] : []),
         status: task.status || 'pending',
         atelier_type: task.atelier_type || 'type_extern',
-        start_date: task.started_at ? new Date(task.started_at).toISOString().slice(0, 16) : '',
-        end_date: task.completed_at ? new Date(task.completed_at).toISOString().slice(0, 16) : '',
         notes: task.notes || ''
       });
     } else {
@@ -598,8 +505,6 @@ const TaskModal = ({ isOpen, onClose, task, atelierUsers, onSave, statusOptions,
         assigned_to: [],
         status: 'pending', // Default status for new tasks
         atelier_type: 'type_extern',
-        start_date: '',
-        end_date: '',
         notes: ''
       });
     }
@@ -615,9 +520,7 @@ const TaskModal = ({ isOpen, onClose, task, atelierUsers, onSave, statusOptions,
 
     try {
       const submitData = {
-        ...formData,
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null
+        ...formData
       };
 
       if (task) {
@@ -713,32 +616,6 @@ const TaskModal = ({ isOpen, onClose, task, atelierUsers, onSave, statusOptions,
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date de début
-              </label>
-              <input
-                type="datetime-local"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">Sélectionnez la date et l'heure de début de la tâche</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date de fin
-              </label>
-              <input
-                type="datetime-local"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">Sélectionnez la date et l'heure de fin de la tâche</p>
             </div>
 
             <div className="md:col-span-2">
