@@ -35,7 +35,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     client: '',
     client_id: null,
     commercial_en_charge: '',
-    date_limite_livraison_attendue: '',
+    date_limite_livraison_estimee: '',
     statut: 'en_cours'
   })
   
@@ -81,7 +81,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_dm: true,
           client: true,
           commercial_en_charge: false, // Auto-populated
-          date_limite_livraison_attendue: true,
+          date_limite_livraison_estimee: true,
           statut: true
         },
         // Step 2: Product level fields visible to commercial
@@ -90,7 +90,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           infograph_en_charge: false,
           agent_impression: false,
           machine_impression: false,
-          date_limite_livraison_estimee: false,
+          date_limite_livraison_estimee: false, // Hidden from modal editing
           etape: true,
           atelier_concerne: true,
           estimated_work_time_minutes: false,
@@ -111,7 +111,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_dm: false,
           client: true,
           commercial_en_charge: false,
-          date_limite_livraison_attendue: false,
+          date_limite_livraison_estimee: false,
           statut: true
         },
         // Step 2: Product level fields visible to infograph
@@ -140,7 +140,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_dm: false,
           client: true,
           commercial_en_charge: false,
-          date_limite_livraison_attendue: false,
+          date_limite_livraison_estimee: false,
           statut: false // Read-only for atelier
         },
         // Step 2: Product level fields visible to atelier (read-only except finitions)
@@ -168,7 +168,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_dm: true,
           client: true,
           commercial_en_charge: false, // Auto-populated
-          date_limite_livraison_attendue: true,
+          date_limite_livraison_estimee: true,
           statut: true
         },
         productLevel: {
@@ -254,8 +254,8 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         client: order.client || '',
         client_id: order.client_id || null,
         commercial_en_charge: order.commercial_en_charge || '',
-        date_limite_livraison_attendue: order.date_limite_livraison_attendue ? 
-          toLocalDateTimeString(order.date_limite_livraison_attendue) : '',
+        date_limite_livraison_estimee: order.date_limite_livraison_estimee ? 
+          toLocalDateTimeString(order.date_limite_livraison_estimee) : '',
         statut: order.statut || 'en_cours'
       })
       
@@ -427,7 +427,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       numero_pms: '',
       infograph_en_charge: '',
       agent_impression: '',
-      date_limite_livraison_estimee: orderFormData.date_limite_livraison_attendue || '',
+      date_limite_livraison_estimee: orderFormData.date_limite_livraison_estimee || '',
       etape: 'pré-presse',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
@@ -917,8 +917,8 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         // Order-level data
         ...orderFormData,
         // Convert local datetime to ISO string for API
-        date_limite_livraison_attendue: orderFormData.date_limite_livraison_attendue ? 
-          toISOString(orderFormData.date_limite_livraison_attendue) : null,
+        date_limite_livraison_estimee: orderFormData.date_limite_livraison_estimee ? 
+          toISOString(orderFormData.date_limite_livraison_estimee) : null,
         commercial_en_charge: orderFormData.commercial_en_charge || user?.username || '',
         client_id: selectedClient?.id || null,
         // Product data
@@ -1093,12 +1093,12 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                       </div>
                     )}
                     
-                    {visibleFields.orderLevel.date_limite_livraison_attendue && (
+                    {visibleFields.orderLevel.date_limite_livraison_estimee && !order && (
                       <Input
-                        label="Date limite de livraison attendue"
+                        label="Date limite de livraison estimée"
                         type="datetime-local"
-                        value={orderFormData.date_limite_livraison_attendue}
-                        onChange={(e) => handleOrderFormChange('date_limite_livraison_attendue', e.target.value)}
+                        value={orderFormData.date_limite_livraison_estimee}
+                        onChange={(e) => handleOrderFormChange('date_limite_livraison_estimee', e.target.value)}
                       />
                     )}
                     
@@ -1584,8 +1584,6 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                           </select>
                                         </div>
                                       )}
-                                      
-                                      {/* Date limite estimée is now automatically populated from order's date_limite_livraison_attendue */}
                                       
                                       {visibleFields.productLevel.etape && (
                                         <div>

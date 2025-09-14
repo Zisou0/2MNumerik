@@ -891,7 +891,7 @@ const DashboardPageClean = () => {
 
   // Calculate urgency for sorting and coloring
   const getOrderUrgency = (orderProductRow) => {
-    const { statut, date_limite_livraison_attendue } = orderProductRow
+    const { statut, date_limite_livraison_estimee } = orderProductRow
     
     // If status is finished, least urgent (5)
     if (statut === 'termine' || statut === 'livre') {
@@ -899,12 +899,12 @@ const DashboardPageClean = () => {
     }
     
     // If no deadline date, medium urgency (3)
-    if (!date_limite_livraison_attendue) {
+    if (!date_limite_livraison_estimee) {
       return 3
     }
     
     const now = currentTime
-    const deadline = new Date(date_limite_livraison_attendue)
+    const deadline = new Date(date_limite_livraison_estimee)
     
     // Calculate time until deadline (positive = time left, negative = overdue)
     const timeUntilDeadline = deadline - now
@@ -940,8 +940,8 @@ const DashboardPageClean = () => {
       }
       
       // If same urgency, sort by deadline
-      const deadlineA = a.date_limite_livraison_attendue ? new Date(a.date_limite_livraison_attendue) : new Date('2099-12-31')
-      const deadlineB = b.date_limite_livraison_attendue ? new Date(b.date_limite_livraison_attendue) : new Date('2099-12-31')
+      const deadlineA = a.date_limite_livraison_estimee ? new Date(a.date_limite_livraison_estimee) : new Date('2099-12-31')
+      const deadlineB = b.date_limite_livraison_estimee ? new Date(b.date_limite_livraison_estimee) : new Date('2099-12-31')
       
       return deadlineA - deadlineB
     })
