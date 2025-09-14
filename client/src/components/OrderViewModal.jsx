@@ -165,8 +165,19 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
   const steps = shouldShowProgressStepper ? getStepsForAtelier(selectedOrderProduct.atelier_concerne) : []
   const currentEtape = shouldShowProgressStepper ? selectedOrderProduct.etape : null
 
+  // Handle backdrop click to close modal
+  const handleBackdropClick = (e) => {
+    // Only close if clicking on the backdrop itself, not on the modal content
+    if (e.target === e.currentTarget) {
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in">
+    <div 
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in"
+      onClick={handleBackdropClick}
+    >
       <div className="relative top-8 mx-auto p-0 w-11/12 max-w-4xl min-h-[calc(100vh-4rem)] animate-in slide-in-from-top-4 duration-500">
         <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden transform transition-all duration-300 hover:shadow-3xl">
           {/* Header */}
@@ -802,6 +813,21 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
                               </div>
                             )}
 
+                            {/* Fournisseur - Only visible when atelier_concerne is sous-traitance and supplier exists */}
+                            {orderProduct.atelier_concerne === 'sous-traitance' && orderProduct.supplier && (
+                              <div className="space-y-1">
+                                <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fournisseur</span>
+                                <div className="bg-white px-3 py-2 rounded border shadow-sm">
+                                  <div className="flex items-center gap-2">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                    <span className="font-semibold text-gray-800">{orderProduct.supplier.nom}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Infographe en charge */}
                             {visibleViewFields.infograph_en_charge && orderProduct.infograph_en_charge && (
                               <div className="space-y-1">
@@ -866,6 +892,79 @@ const OrderViewModal = ({ order, onClose, onEdit, formatDate, getStatusBadge, et
                             )}
                           </div>
                         </div>
+
+                        {/* Supplier Information - Only for sous-traitance */}
+                        {orderProduct.atelier_concerne === 'sous-traitance' && orderProduct.supplier && (
+                          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4 mb-6 border border-blue-200">
+                            <h6 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              Informations du fournisseur
+                            </h6>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                              {/* Nom du fournisseur */}
+                              <div className="space-y-1">
+                                <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Nom du fournisseur</span>
+                                <div className="bg-white px-3 py-2 rounded border shadow-sm">
+                                  <div className="flex items-start gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-800 flex-shrink-0 mt-0.5">
+                                      {orderProduct.supplier.nom.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className="font-semibold text-gray-800 break-words min-w-0 flex-1">{orderProduct.supplier.nom}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Email */}
+                              {orderProduct.supplier.email && (
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Email</span>
+                                  <div className="bg-white px-3 py-2 rounded border shadow-sm">
+                                    <div className="flex items-start gap-2">
+                                      <svg className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                      </svg>
+                                      <span className="font-medium text-gray-800 break-words break-all min-w-0 flex-1">{orderProduct.supplier.email}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Téléphone */}
+                              {orderProduct.supplier.telephone && (
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Téléphone</span>
+                                  <div className="bg-white px-3 py-2 rounded border shadow-sm">
+                                    <div className="flex items-start gap-2">
+                                      <svg className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                      </svg>
+                                      <span className="font-medium text-gray-800 break-words min-w-0 flex-1">{orderProduct.supplier.telephone}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Spécialités */}
+                              {orderProduct.supplier.specialites && orderProduct.supplier.specialites.length > 0 && (
+                                <div className="space-y-1 md:col-span-2 xl:col-span-3">
+                                  <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Spécialités</span>
+                                  <div className="bg-white px-3 py-2 rounded border shadow-sm">
+                                    <div className="flex flex-wrap gap-2">
+                                      {orderProduct.supplier.specialites.map((specialite, index) => (
+                                        <span key={index} className="px-3 py-1 bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 text-sm font-medium rounded-full border border-blue-200">
+                                          {specialite}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Options spéciales */}
                         {(orderProduct.bat || orderProduct.express || orderProduct.pack_fin_annee) && (

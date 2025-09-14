@@ -116,6 +116,15 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('Offset', 'Sérigraphie', 'Objet publicitaire', 'Autre'),
       allowNull: true,
       comment: 'Type de sous-traitance pour ce produit spécifique'
+    },
+    supplier_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'suppliers',
+        key: 'id'
+      },
+      comment: 'ID du fournisseur pour la sous-traitance'
     }
   }, {
     tableName: 'order_products',
@@ -147,6 +156,12 @@ module.exports = (sequelize) => {
     OrderProduct.hasMany(models.OrderProductFinition, {
       foreignKey: 'order_product_id',
       as: 'orderProductFinitions'
+    });
+    
+    // OrderProduct belongs to Supplier
+    OrderProduct.belongsTo(models.Supplier, {
+      foreignKey: 'supplier_id',
+      as: 'supplier'
     });
   };
 

@@ -395,4 +395,32 @@ export const atelierTaskAPI = {
   }),
 }
 
-export default { apiCall, authAPI, userAPI, orderAPI, productAPI, clientAPI, finitionAPI, statisticsAPI, exportAPI, atelierTaskAPI }
+// Supplier API calls
+export const supplierAPI = {
+  getSuppliers: (params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/suppliers${queryString ? '?' + queryString : ''}`);
+  },
+  
+  getSupplier: (id) => apiCall(`/suppliers/${id}`),
+  
+  createSupplier: (supplierData) => apiCall('/suppliers', {
+    method: 'POST',
+    body: JSON.stringify(supplierData),
+  }),
+  
+  updateSupplier: (id, supplierData) => apiCall(`/suppliers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(supplierData),
+  }),
+  
+  deleteSupplier: (id) => apiCall(`/suppliers/${id}`, {
+    method: 'DELETE',
+  }),
+}
+
+export default { apiCall, authAPI, userAPI, orderAPI, productAPI, clientAPI, finitionAPI, statisticsAPI, exportAPI, atelierTaskAPI, supplierAPI }

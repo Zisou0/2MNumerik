@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { clientAPI } from '../utils/api';
+import { clientAPI, supplierAPI } from '../utils/api';
 import Button from '../components/ButtonComponent';
 import AlertDialog from '../components/AlertDialog';
 import * as XLSX from 'xlsx';
 
 const ClientsPage = () => {
+  // Tab state
+  const [activeTab, setActiveTab] = useState('clients'); // 'clients' or 'fournisseurs'
+  
+  // Client states
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,6 +31,27 @@ const ClientsPage = () => {
     currentPage: 1,
     totalPages: 1,
     totalClients: 0
+  });
+
+  // Supplier states
+  const [suppliers, setSuppliers] = useState([]);
+  const [supplierLoading, setSupplierLoading] = useState(true);
+  const [supplierError, setSupplierError] = useState('');
+  const [showSupplierCreateModal, setShowSupplierCreateModal] = useState(false);
+  const [showSupplierEditModal, setShowSupplierEditModal] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [supplierStats, setSupplierStats] = useState({});
+  const [showSupplierDeleteDialog, setShowSupplierDeleteDialog] = useState(false);
+  const [supplierToDelete, setSupplierToDelete] = useState(null);
+  const [supplierFilters, setSupplierFilters] = useState({
+    search: '',
+    specialty: '',
+    active: ''
+  });
+  const [supplierPagination, setSupplierPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0
   });
 
   const typeClientOptions = [
@@ -61,9 +86,13 @@ const ClientsPage = () => {
   };
 
   useEffect(() => {
-    fetchClients();
-    fetchStats();
-  }, [filters]);
+    if (activeTab === 'clients') {
+      fetchClients();
+      fetchStats();
+    } else {
+      fetchSuppliers();
+    }
+  }, [filters, supplierFilters, activeTab]);
 
   const handleCreateClient = () => {
     setSelectedClient(null);
@@ -105,6 +134,95 @@ const ClientsPage = () => {
     setClientToDelete(null);
   };
 
+  // Supplier functions
+  const fetchSuppliers = async (page = 1) => {
+    try {
+      setSupplierLoading(true);
+      const params = { page, limit: 10, ...supplierFilters };
+      Object.keys(params).forEach(key => params[key] === '' && delete params[key]);
+      
+      const response = await supplierAPI.getSuppliers(params);
+      setSuppliers(response.suppliers || []);
+      setSupplierPagination({
+        currentPage: response.currentPage || 1,
+        totalPages: response.totalPages || 1,
+        totalCount: response.totalCount || 0
+      });
+    } catch (err) {
+      setSupplierError('Erreur lors du chargement des fournisseurs');
+    } finally {
+      setSupplierLoading(false);
+    }
+  };
+
+  const fetchSupplierStats = async () => {
+    try {
+      // Create basic stats from suppliers array after it's loaded
+      if (suppliers.length > 0) {
+        const activeSuppliers = suppliers.filter(s => s.actif);
+        const inactiveSuppliers = suppliers.filter(s => !s.actif);
+        
+        setSupplierStats({
+          total: suppliers.length,
+          active: activeSuppliers.length,
+          inactive: inactiveSuppliers.length
+        });
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement des statistiques fournisseurs:', err);
+    }
+  };
+
+  // Add useEffect to update supplier stats when suppliers change
+  useEffect(() => {
+    if (activeTab === 'fournisseurs' && suppliers.length > 0) {
+      fetchSupplierStats();
+    }
+  }, [suppliers, activeTab]);
+
+  const handleCreateSupplier = () => {
+    setSelectedSupplier(null);
+    setShowSupplierCreateModal(true);
+  };
+
+  const handleEditSupplier = (supplier) => {
+    setSelectedSupplier(supplier);
+    setShowSupplierEditModal(true);
+  };
+
+  const handleDeleteSupplier = async (supplierId) => {
+    setSupplierToDelete(supplierId);
+    setShowSupplierDeleteDialog(true);
+  };
+
+  const confirmDeleteSupplier = async () => {
+    if (supplierToDelete) {
+      try {
+        await supplierAPI.deleteSupplier(supplierToDelete);
+        fetchSuppliers(supplierPagination.currentPage);
+        setShowSupplierDeleteDialog(false);
+        setSupplierToDelete(null);
+      } catch (err) {
+        setSupplierError('Erreur lors de la suppression du fournisseur');
+        setShowSupplierDeleteDialog(false);
+        setSupplierToDelete(null);
+      }
+    }
+  };
+
+  const cancelDeleteSupplier = () => {
+    setShowSupplierDeleteDialog(false);
+    setSupplierToDelete(null);
+  };
+
+  // Tab change handler
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    // Reset errors when switching tabs
+    setError('');
+    setSupplierError('');
+  };
+
   const getTypeLabel = (type) => {
     const option = typeClientOptions.find(opt => opt.value === type);
     return option ? option.label : type;
@@ -122,10 +240,12 @@ const ClientsPage = () => {
     }
   };
 
-  if (loading && clients.length === 0) {
+  if ((loading && activeTab === 'clients' && clients.length === 0) || (supplierLoading && activeTab === 'fournisseurs' && suppliers.length === 0)) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-gray-500">Chargement des clients...</div>
+        <div className="text-gray-500">
+          {activeTab === 'clients' ? 'Chargement des clients...' : 'Chargement des fournisseurs...'}
+        </div>
       </div>
     );
   }
@@ -133,8 +253,40 @@ const ClientsPage = () => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Gestion des clients</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          {activeTab === 'clients' ? 'Gestion des clients' : 'Gestion des fournisseurs'}
+        </h1>
+
+        {/* Tab Navigation */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => handleTabChange('clients')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'clients'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Clients ({pagination.totalClients || 0})
+              </button>
+              <button
+                onClick={() => handleTabChange('fournisseurs')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'fournisseurs'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Fournisseurs ({supplierPagination.totalCount || 0})
+              </button>
+            </nav>
+          </div>
+        </div>
         
+        {activeTab === 'clients' ? (
+          <>
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white p-4 rounded-lg shadow">
@@ -158,8 +310,29 @@ const ClientsPage = () => {
             <div className="text-sm text-gray-600">Particuliers</div>
           </div>
         </div>
+          </>
+        ) : (
+          <>
+        {/* Supplier Statistics Cards */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="text-2xl font-bold text-blue-600">{supplierStats.total || 0}</div>
+            <div className="text-sm text-gray-600">Total</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="text-2xl font-bold text-green-600">{supplierStats.active || 0}</div>
+            <div className="text-sm text-gray-600">Actifs</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="text-2xl font-bold text-red-600">{supplierStats.inactive || 0}</div>
+            <div className="text-sm text-gray-600">Inactifs</div>
+          </div>
+        </div>
+          </>
+        )}
 
         {/* Filters and Actions */}
+        {activeTab === 'clients' ? (
         <div className="bg-white p-4 rounded-lg shadow mb-6">
           <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-3 flex-1">
@@ -240,13 +413,68 @@ const ClientsPage = () => {
             </div>
           </div>
         </div>
+        ) : (
+        <div className="bg-white p-4 rounded-lg shadow mb-6">
+          <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-3 flex-1">
+              <input
+                type="text"
+                placeholder="Rechercher fournisseur"
+                value={supplierFilters.search}
+                onChange={(e) => setSupplierFilters({...supplierFilters, search: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              />
 
-        {error && (
+              <input
+                type="text"
+                placeholder="Spécialité"
+                value={supplierFilters.specialty}
+                onChange={(e) => setSupplierFilters({...supplierFilters, specialty: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              />
+
+              <select
+                value={supplierFilters.active}
+                onChange={(e) => setSupplierFilters({...supplierFilters, active: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 text-sm"
+              >
+                <option value="">Tous les statuts</option>
+                <option value="true">Actifs</option>
+                <option value="false">Inactifs</option>
+              </select>
+
+              {/* Clear Filters Button */}
+              {(supplierFilters.search || supplierFilters.specialty || supplierFilters.active) && (
+                <button
+                  onClick={() => setSupplierFilters({
+                    search: '',
+                    specialty: '',
+                    active: ''
+                  })}
+                  className="text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors duration-200"
+                >
+                  Effacer filtres
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 lg:flex-shrink-0">
+              <Button onClick={handleCreateSupplier}>
+                Nouveau fournisseur
+              </Button>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {(error || supplierError) && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+            {activeTab === 'clients' ? error : supplierError}
           </div>
         )}
 
+        {/* Content based on active tab */}
+        {activeTab === 'clients' ? (
+          <>
         {/* Clients Cards - Mobile/Tablet View */}
         <div className="lg:hidden space-y-4 mb-6">
           {clients.map((client) => (
@@ -488,8 +716,238 @@ const ClientsPage = () => {
             </div>
           )}
         </div>
+          </>
+        ) : (
+          /* Supplier Content */
+          <>
+        {/* Suppliers Cards - Mobile/Tablet View */}
+        <div className="lg:hidden space-y-4 mb-6">
+          {suppliers.map((supplier) => (
+            <div 
+              key={supplier.id} 
+              className="bg-white shadow-md rounded-lg p-4 border transition-colors duration-200"
+            >
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{supplier.nom}</h3>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      supplier.actif 
+                        ? 'bg-green-100 text-green-800 border border-green-200' 
+                        : 'bg-red-100 text-red-800 border border-red-200'
+                    }`}>
+                      {supplier.actif ? 'Actif' : 'Inactif'}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-1 text-sm text-gray-600 mb-3">
+                    {supplier.email && <p><span className="font-medium">Email:</span> {supplier.email}</p>}
+                    {supplier.telephone && <p><span className="font-medium">Téléphone:</span> {supplier.telephone}</p>}
+                    {supplier.adresse && <p><span className="font-medium">Adresse:</span> {supplier.adresse}</p>}
+                    {supplier.specialites && supplier.specialites.length > 0 && (
+                      <p><span className="font-medium">Spécialités:</span> {supplier.specialites.join(', ')}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t">
+                <button
+                  onClick={() => handleEditSupplier(supplier)}
+                  className="flex-1 flex items-center justify-center gap-2 text-indigo-600 hover:text-indigo-900 bg-indigo-100 hover:bg-indigo-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Modifier
+                </button>
+                <button
+                  onClick={() => handleDeleteSupplier(supplier.id)}
+                  className="flex-1 flex items-center justify-center gap-2 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          ))}
+          
+          {suppliers.length === 0 && (
+            <div className="text-center py-8 text-gray-500 bg-white rounded-lg shadow">
+              Aucun fournisseur trouvé
+            </div>
+          )}
+        </div>
+
+        {/* Suppliers Table - Desktop View */}
+        <div className="hidden lg:block bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fournisseur
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Contact
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Adresse
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Spécialités
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Statut
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {suppliers.map((supplier) => (
+                  <tr key={supplier.id} className="hover:bg-gray-50 transition-colors duration-200">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {supplier.nom}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {supplier.email && (
+                          <div className="mb-1">
+                            <a href={`mailto:${supplier.email}`} className="text-blue-600 hover:text-blue-900">
+                              {supplier.email}
+                            </a>
+                          </div>
+                        )}
+                        {supplier.telephone && (
+                          <div className="text-gray-600">
+                            {supplier.telephone}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <div>
+                        {supplier.adresse ? (
+                          <div className="max-w-xs truncate">{supplier.adresse}</div>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {supplier.specialites && supplier.specialites.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {supplier.specialites.slice(0, 2).map((specialite, index) => (
+                            <span key={index} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {specialite}
+                            </span>
+                          ))}
+                          {supplier.specialites.length > 2 && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              +{supplier.specialites.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        supplier.actif 
+                          ? 'bg-green-100 text-green-800 border border-green-200' 
+                          : 'bg-red-100 text-red-800 border border-red-200'
+                      }`}>
+                        {supplier.actif ? 'Actif' : 'Inactif'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleEditSupplier(supplier)}
+                        className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900 bg-indigo-100 hover:bg-indigo-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Modifier
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSupplier(supplier.id)}
+                        className="inline-flex items-center gap-1 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Supprimer
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Supplier Pagination */}
+          {supplierPagination.totalPages > 1 && (
+            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => fetchSuppliers(supplierPagination.currentPage - 1)}
+                  disabled={supplierPagination.currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => fetchSuppliers(supplierPagination.currentPage + 1)}
+                  disabled={supplierPagination.currentPage === supplierPagination.totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Suivant
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Page <span className="font-medium">{supplierPagination.currentPage}</span> sur{' '}
+                    <span className="font-medium">{supplierPagination.totalPages}</span> - Total:{' '}
+                    <span className="font-medium">{supplierPagination.totalCount}</span> fournisseurs
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                    {[...Array(supplierPagination.totalPages)].map((_, i) => (
+                      <button
+                        key={i + 1}
+                        onClick={() => fetchSuppliers(i + 1)}
+                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                          supplierPagination.currentPage === i + 1
+                            ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+          </>
+        )}
       </div>
 
+      {/* Modals based on active tab */}
+      {activeTab === 'clients' ? (
+        <>
       {/* Create/Edit Modal */}
       {(showCreateModal || showEditModal) && (
         <ClientModal
@@ -533,6 +991,40 @@ const ClientsPage = () => {
         cancelText="Annuler"
         type="danger"
       />
+        </>
+      ) : (
+        <>
+      {/* Supplier Create/Edit Modal */}
+      {(showSupplierCreateModal || showSupplierEditModal) && (
+        <SupplierModal
+          supplier={selectedSupplier}
+          onClose={() => {
+            setShowSupplierCreateModal(false);
+            setShowSupplierEditModal(false);
+            setSelectedSupplier(null);
+          }}
+          onSave={() => {
+            fetchSuppliers(supplierPagination.currentPage);
+            setShowSupplierCreateModal(false);
+            setShowSupplierEditModal(false);
+            setSelectedSupplier(null);
+          }}
+        />
+      )}
+
+      {/* Supplier Delete Confirmation Dialog */}
+      <AlertDialog
+        isOpen={showSupplierDeleteDialog}
+        onClose={cancelDeleteSupplier}
+        onConfirm={confirmDeleteSupplier}
+        title="Confirmer la suppression"
+        message={`Êtes-vous sûr de vouloir supprimer ce fournisseur ? Cette action est irréversible.`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        type="danger"
+      />
+        </>
+      )}
     </div>
   );
 };
@@ -1013,6 +1505,269 @@ const ImportExcelModal = ({ onClose, onImportSuccess }) => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Supplier Modal Component
+const SupplierModal = ({ supplier, onClose, onSave }) => {
+  const [formData, setFormData] = useState({
+    nom: '',
+    email: '',
+    telephone: '',
+    adresse: '',
+    specialites: [],
+    actif: true,
+    notes: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Available specialties options
+  const specialtyOptions = [
+    { value: 'impression_numerique', label: 'Impression numérique' },
+    { value: 'impression_offset', label: 'Impression offset' },
+    { value: 'grand_format', label: 'Grand format' },
+    { value: 'finition', label: 'Finition' },
+    { value: 'reliure', label: 'Reliure' },
+    { value: 'facade', label: 'Façade' },
+    { value: 'signalетique', label: 'Signalétique' },
+    { value: 'packaging', label: 'Packaging' },
+    { value: 'textile', label: 'Textile' },
+    { value: 'serigraphie', label: 'Sérigraphie' },
+    { value: 'gravure', label: 'Gravure' },
+    { value: 'decoupe_laser', label: 'Découpe laser' },
+    { value: 'plastification', label: 'Plastification' },
+    { value: 'vernis', label: 'Vernis' },
+    { value: 'dorure', label: 'Dorure' },
+    { value: 'gaufrage', label: 'Gaufrage' }
+  ];
+  const [specialiteInput, setSpecialiteInput] = useState('');
+
+  useEffect(() => {
+    if (supplier) {
+      setFormData({
+        nom: supplier.nom || '',
+        email: supplier.email || '',
+        telephone: supplier.telephone || '',
+        adresse: supplier.adresse || '',
+        specialites: supplier.specialites || [],
+        actif: supplier.actif !== undefined ? supplier.actif : true,
+        notes: supplier.notes || ''
+      });
+    }
+  }, [supplier]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (supplier) {
+        await supplierAPI.updateSupplier(supplier.id, formData);
+      } else {
+        await supplierAPI.createSupplier(formData);
+      }
+      onSave();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur lors de l\'opération');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const addSpecialite = () => {
+    if (specialiteInput.trim() && !formData.specialites.includes(specialiteInput.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        specialites: [...prev.specialites, specialiteInput.trim()]
+      }));
+      setSpecialiteInput('');
+    }
+  };
+
+  const removeSpecialite = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      specialites: prev.specialites.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSpecialiteKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addSpecialite();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-gray-900">
+              {supplier ? 'Modifier le fournisseur' : 'Nouveau fournisseur'}
+            </h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nom du fournisseur *
+                </label>
+                <input
+                  type="text"
+                  value={formData.nom}
+                  onChange={(e) => handleChange('nom', e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange('email', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Téléphone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.telephone}
+                  onChange={(e) => handleChange('telephone', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Adresse
+                </label>
+                <textarea
+                  value={formData.adresse}
+                  onChange={(e) => handleChange('adresse', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Spécialités
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={specialiteInput}
+                    onChange={(e) => setSpecialiteInput(e.target.value)}
+                    onKeyPress={handleSpecialiteKeyPress}
+                    placeholder="Ajouter une spécialité"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addSpecialite}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200"
+                  >
+                    Ajouter
+                  </button>
+                </div>
+                {formData.specialites.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {formData.specialites.map((specialite, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {specialite}
+                        <button
+                          type="button"
+                          onClick={() => removeSpecialite(index)}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => handleChange('notes', e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.actif}
+                    onChange={(e) => handleChange('actif', e.target.checked)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Fournisseur actif</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-6 border-t">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors duration-200"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
+              >
+                {loading ? 'Enregistrement...' : supplier ? 'Mettre à jour' : 'Créer'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

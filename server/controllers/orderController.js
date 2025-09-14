@@ -1,4 +1,4 @@
-const { Order, Product, OrderProduct, OrderProductFinition, Finition, Client } = require('../models');
+const { Order, Product, OrderProduct, OrderProductFinition, Finition, Client, Supplier } = require('../models');
 const { Op, Sequelize } = require('sequelize');
 
 class OrderController {
@@ -415,6 +415,12 @@ class OrderController {
             attributes: ['id', 'name', 'estimated_creation_time']
           },
           {
+            model: Supplier,
+            as: 'supplier',
+            attributes: ['id', 'nom', 'email', 'telephone', 'specialites'],
+            required: false // Left join - not all products have suppliers
+          },
+          {
             model: OrderProductFinition,
             as: 'orderProductFinitions',
             include: [
@@ -593,7 +599,8 @@ class OrderController {
         bat: product.bat || null,
         express: product.express || null,
         pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
-        type_sous_traitance: product.type_sous_traitance || null
+        type_sous_traitance: product.type_sous_traitance || null,
+        supplier_id: product.supplier_id || null
       }));
 
       const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
@@ -629,6 +636,12 @@ class OrderController {
                 model: Product,
                 as: 'product',
                 attributes: ['id', 'name', 'estimated_creation_time']
+              },
+              {
+                model: Supplier,
+                as: 'supplier',
+                attributes: ['id', 'nom', 'email', 'telephone', 'specialites'],
+                required: false
               },
               {
                 model: OrderProductFinition,
@@ -849,7 +862,8 @@ class OrderController {
           bat: product.bat || null,
           express: product.express || null,
           pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
-          type_sous_traitance: product.type_sous_traitance || null
+          type_sous_traitance: product.type_sous_traitance || null,
+          supplier_id: product.supplier_id || null
         }));
 
         const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
@@ -907,6 +921,12 @@ class OrderController {
                 model: Product,
                 as: 'product',
                 attributes: ['id', 'name', 'estimated_creation_time']
+              },
+              {
+                model: Supplier,
+                as: 'supplier',
+                attributes: ['id', 'nom', 'email', 'telephone', 'specialites'],
+                required: false
               },
               {
                 model: OrderProductFinition,

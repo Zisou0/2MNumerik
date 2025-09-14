@@ -16,6 +16,7 @@ const statisticsRoutes = require('./routes/statisticsRoutes');
 const exportRoutes = require('./routes/exportRoutes');
 const finitionRoutes = require('./routes/finitionRoutes');
 const atelierTaskRoutes = require('./routes/atelierTaskRoutes');
+const supplierRoutes = require('./routes/suppliers');
 
 const app = express();
 const server = createServer(app);
@@ -181,6 +182,7 @@ app.use('/api/statistics', statisticsRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/finitions', finitionRoutes);
 app.use('/api/atelier-tasks', atelierTaskRoutes);
+app.use('/api/suppliers', supplierRoutes);
 app.use('/api/atelier-tasks', atelierTaskRoutes);
 app.use('/api/atelier-tasks', atelierTaskRoutes);
 

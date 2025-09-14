@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { orderAPI, productAPI, apiCall } from '../utils/api'
+import { orderAPI, productAPI, supplierAPI, apiCall } from '../utils/api'
 import Button from './ButtonComponent'
 import Input from './InputComponent'
 import ClientSearch from './ClientSearch'
@@ -43,6 +43,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   const [selectedProducts, setSelectedProducts] = useState([])
   const [availableProducts, setAvailableProducts] = useState([])
   const [availableUsers, setAvailableUsers] = useState([])
+  const [availableSuppliers, setAvailableSuppliers] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -62,9 +63,13 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   // Product search state - object with keys as `product-${productIndex}` for each product
   const [productSearchStates, setProductSearchStates] = useState({})
   
+  // Supplier search state - object with keys as `supplier-${productIndex}` for each product
+  const [supplierSearchStates, setSupplierSearchStates] = useState({})
+  
   // Refs for click-outside functionality
   const finitionSearchRefs = useRef({})
   const productSearchRefs = useRef({})
+  const supplierSearchRefs = useRef({})
 
   // Get fields visible for current user role
   const getVisibleFields = () => {
@@ -94,6 +99,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           pack_fin_annee: true,
           commentaires: true,
           type_sous_traitance: true, // Visible to commercial users for sous-traitance
+          supplier_selection: true, // Add supplier selection for commercial users
           finitions: false
         }
       }
@@ -122,6 +128,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           express: true,
           commentaires: true,
           type_sous_traitance: false, // Hidden from infograph users
+          supplier_selection: false, // Hidden from infograph users
           finitions: true
         }
       }
@@ -149,6 +156,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           express: false, // Read-only for atelier
           commentaires: false, // Read-only for atelier
           type_sous_traitance: false, // Read-only for atelier
+          supplier_selection: false, // Read-only for atelier
           finitions: true // Only editable field for atelier
         }
       }
@@ -175,6 +183,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           express: true,
           commentaires: true,
           type_sous_traitance: true, // Visible to admin
+          supplier_selection: true, // Visible to admin
           finitions: true
         }
       }
@@ -214,6 +223,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
 
     fetchProducts()
     fetchUsers()
+    fetchSuppliers()
   }, [])
 
   const fetchUsers = async () => {
@@ -223,6 +233,15 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       setAvailableUsers(response.users || [])
     } catch (error) {
       console.error('Error fetching users:', error)
+    }
+  }
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await supplierAPI.getSuppliers({ active: 'true' })
+      setAvailableSuppliers(response.suppliers || [])
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
     }
   }
 
@@ -290,6 +309,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
             pack_fin_annee: orderProduct.pack_fin_annee !== undefined ? orderProduct.pack_fin_annee.toString() : '',
             commentaires: orderProduct.commentaires || '',
             type_sous_traitance: orderProduct.type_sous_traitance || '',
+            supplier_id: orderProduct.supplier_id || null,
             finitions: finitions
           }
         })
@@ -317,6 +337,15 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         }
       })
       
+      // Handle supplier search dropdowns
+      Object.keys(supplierSearchStates).forEach(key => {
+        const ref = supplierSearchRefs.current[key]
+        if (ref && !ref.contains(event.target) && supplierSearchStates[key]?.isOpen) {
+          const productIndex = parseInt(key.split('-')[1])
+          closeSupplierSearch(productIndex)
+        }
+      })
+      
       // Handle product search dropdowns
       Object.keys(productSearchStates).forEach(key => {
         const ref = productSearchRefs.current[key]
@@ -331,7 +360,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [finitionSearchStates, productSearchStates])
+  }, [finitionSearchStates, productSearchStates, supplierSearchStates])
 
   // Handler functions
   const handleOrderFormChange = (field, value) => {
@@ -407,6 +436,8 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       pack_fin_annee: 'false',
       commentaires: '',
       type_sous_traitance: '',
+      supplier_id: '',
+      supplier_name: '', // For display purposes
       finitions: []
     }
     setSelectedProducts([...selectedProducts, newProduct])
@@ -721,6 +752,88 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     return selectedProduct ? selectedProduct.name : ''
   }
 
+  // Supplier search helper functions
+  const getSupplierSearchKey = (productIndex) => `supplier-${productIndex}`
+  
+  const initializeSupplierSearch = (productIndex) => {
+    const key = getSupplierSearchKey(productIndex)
+    if (!supplierSearchStates[key]) {
+      // When initializing, use the current supplier name if one is selected
+      const currentSupplierName = getSelectedSupplierName(productIndex)
+      setSupplierSearchStates(prev => ({
+        ...prev,
+        [key]: {
+          searchTerm: currentSupplierName,
+          isOpen: false,
+          filteredSuppliers: []
+        }
+      }))
+    }
+  }
+
+  const updateSupplierSearch = (productIndex, searchTerm) => {
+    const key = getSupplierSearchKey(productIndex)
+    const product = selectedProducts[productIndex]
+
+    // If user is typing and it doesn't match the current supplier name, clear the selection
+    const currentSupplierName = getSelectedSupplierName(productIndex)
+    if (searchTerm !== currentSupplierName && product.supplier_id) {
+      updateProduct(productIndex, 'supplier_id', null)
+    }
+
+    const availableSuppliers = getFilteredSuppliers() // No need to pass type anymore
+    const filteredSuppliers = availableSuppliers
+      .filter(s => s.nom.toLowerCase().includes(searchTerm.toLowerCase()))
+
+    setSupplierSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        searchTerm,
+        isOpen: searchTerm.length > 0 || !product.supplier_id,
+        filteredSuppliers
+      }
+    }))
+  }
+
+  const selectSupplierFromSearch = (productIndex, supplier) => {
+    const key = getSupplierSearchKey(productIndex)
+    updateProduct(productIndex, 'supplier_id', supplier.id)
+    setSupplierSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        searchTerm: supplier.nom,
+        isOpen: false,
+        filteredSuppliers: []
+      }
+    }))
+  }
+
+  const closeSupplierSearch = (productIndex) => {
+    const key = getSupplierSearchKey(productIndex)
+    setSupplierSearchStates(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        isOpen: false
+      }
+    }))
+  }
+
+  const getSelectedSupplierName = (productIndex) => {
+    const product = selectedProducts[productIndex]
+    if (!product.supplier_id) return ''
+    
+    // Convert supplier_id to number for comparison since it might be stored as string
+    const supplierId = typeof product.supplier_id === 'string' ? parseInt(product.supplier_id) : product.supplier_id
+    const selectedSupplier = availableSuppliers.find(s => s.id === supplierId)
+    return selectedSupplier ? selectedSupplier.nom : ''
+  }
+
+  const getFilteredSuppliers = (typeSousTraitance) => {
+    // Return all active suppliers regardless of type
+    return availableSuppliers.filter(supplier => supplier.actif !== false)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -771,6 +884,15 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
 
       if (visibleFields.productLevel.bat && !product.bat) {
         setError(`Produit ${i + 1}: Veuillez sélectionner l'option BAT (avec/sans/valider)`)
+        setLoading(false)
+        return
+      }
+
+      // Validate supplier for sous-traitance products
+      if (product.atelier_concerne === 'sous-traitance' && 
+          visibleFields.productLevel.supplier_selection && 
+          !product.supplier_id) {
+        setError(`Produit ${i + 1}: Veuillez sélectionner un fournisseur pour la sous-traitance`)
         setLoading(false)
         return
       }
@@ -828,8 +950,19 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
 
   // Remove old handleChange function
 
+  // Handle backdrop click to close modal
+  const handleBackdropClick = (e) => {
+    // Only close if clicking on the backdrop itself, not on the modal content
+    if (e.target === e.currentTarget) {
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in">
+    <div 
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-all duration-300 ease-out overflow-y-auto h-full w-full z-50 animate-in fade-in"
+      onClick={handleBackdropClick}
+    >
       <div className="relative top-8 mx-auto p-0 w-11/12 max-w-5xl min-h-[calc(100vh-4rem)] animate-in slide-in-from-top-4 duration-500">
         <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden transform transition-all duration-300 hover:shadow-3xl">
           {/* Header */}
@@ -1364,14 +1497,25 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                       </div>
                                       
                                       {product.atelier_concerne === 'sous-traitance' && (
-                                        <div>
-                                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Type de sous-traitance
-                                          </label>
-                                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
-                                            {product.type_sous_traitance || 'Non défini'}
+                                        <>
+                                          <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                              Type de sous-traitance
+                                            </label>
+                                            <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                              {product.type_sous_traitance || 'Non défini'}
+                                            </div>
                                           </div>
-                                        </div>
+                                          
+                                          <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                              Fournisseur
+                                            </label>
+                                            <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                              {getSelectedSupplierName(index) || 'Non assigné'}
+                                            </div>
+                                          </div>
+                                        </>
                                       )}
                                       
                                       <div className="md:col-span-2 lg:col-span-3">
@@ -1553,14 +1697,34 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                         </div>
                                       )}
                                       
-                                      {visibleFields.productLevel.type_sous_traitance && product.atelier_concerne === 'sous-traitance' && (
+                                      {visibleFields.productLevel.type_sous_traitance && product.atelier_concerne === 'sous-traitance' && user?.role !== 'atelier' && (
                                         <div>
                                           <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Type de sous-traitance
                                           </label>
                                           <select
-                                            value={product.type_sous_traitance}
-                                            onChange={(e) => updateProduct(index, 'type_sous_traitance', e.target.value)}
+                                            value={product.type_sous_traitance || ''}
+                                            onChange={(e) => {
+                                              // Update both fields in a single state update
+                                              const updated = [...selectedProducts]
+                                              updated[index] = { 
+                                                ...updated[index], 
+                                                type_sous_traitance: e.target.value,
+                                                supplier_id: '' // Reset supplier when type changes
+                                              }
+                                              setSelectedProducts(updated)
+                                              
+                                              // Reset supplier search state
+                                              const supplierSearchKey = getSupplierSearchKey(index)
+                                              setSupplierSearchStates(prev => ({
+                                                ...prev,
+                                                [supplierSearchKey]: {
+                                                  searchTerm: '',
+                                                  isOpen: false,
+                                                  filteredSuppliers: []
+                                                }
+                                              }))
+                                            }}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                             required
                                           >
@@ -1571,6 +1735,143 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                               </option>
                                             ))}
                                           </select>
+                                        </div>
+                                      )}
+                                      
+                                      {visibleFields.productLevel.supplier_selection && 
+                                       product.atelier_concerne === 'sous-traitance' && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Fournisseur *
+                                          </label>
+                                          <div 
+                                            className="relative"
+                                            ref={(el) => {
+                                              if (el) {
+                                                supplierSearchRefs.current[getSupplierSearchKey(index)] = el
+                                              }
+                                            }}
+                                          >
+                                            <div className="relative">
+                                              <input
+                                                type="text"
+                                                value={supplierSearchStates[getSupplierSearchKey(index)]?.searchTerm ?? getSelectedSupplierName(index)}
+                                                onChange={(e) => {
+                                                  initializeSupplierSearch(index)
+                                                  updateSupplierSearch(index, e.target.value)
+                                                }}
+                                                onFocus={() => {
+                                                  initializeSupplierSearch(index)
+                                                  // Only update search if there's no current search term
+                                                  const currentSearchTerm = supplierSearchStates[getSupplierSearchKey(index)]?.searchTerm
+                                                  if (currentSearchTerm === undefined || currentSearchTerm === null) {
+                                                    updateSupplierSearch(index, getSelectedSupplierName(index))
+                                                  }
+                                                }}
+                                                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                placeholder="Rechercher un fournisseur..."
+                                                required
+                                              />
+                                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Supplier Search Results Dropdown */}
+                                            {supplierSearchStates[getSupplierSearchKey(index)]?.isOpen && 
+                                             supplierSearchStates[getSupplierSearchKey(index)]?.filteredSuppliers.length > 0 && (
+                                              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                                {supplierSearchStates[getSupplierSearchKey(index)].filteredSuppliers.map((supplier) => (
+                                                  <button
+                                                    key={supplier.id}
+                                                    type="button"
+                                                    onClick={() => selectSupplierFromSearch(index, supplier)}
+                                                    className="w-full px-3 py-3 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                                  >
+                                                    <div className="flex items-center justify-between">
+                                                      <span className="font-medium text-gray-900">{supplier.nom}</span>
+                                                      <div className="flex flex-wrap gap-1">
+                                                        {supplier.specialites?.map((spec, idx) => (
+                                                          <span key={idx} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                            {spec}
+                                                          </span>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                    {supplier.telephone && (
+                                                      <p className="text-sm text-gray-600 mt-1">📞 {supplier.telephone}</p>
+                                                    )}
+                                                    {supplier.email && (
+                                                      <p className="text-sm text-gray-600">📧 {supplier.email}</p>
+                                                    )}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                            
+                                            {/* No Results Message */}
+                                            {supplierSearchStates[getSupplierSearchKey(index)]?.isOpen && 
+                                             supplierSearchStates[getSupplierSearchKey(index)]?.searchTerm.length > 0 &&
+                                             supplierSearchStates[getSupplierSearchKey(index)]?.filteredSuppliers.length === 0 && (
+                                              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3">
+                                                <div className="text-center text-gray-500">
+                                                  <svg className="w-6 h-6 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                  </svg>
+                                                  <p className="text-sm">Aucun fournisseur trouvé pour "{supplierSearchStates[getSupplierSearchKey(index)].searchTerm}"</p>
+                                                </div>
+                                              </div>
+                                            )}
+                                            
+                                            {/* Show all suppliers when no search term */}
+                                            {(!supplierSearchStates[getSupplierSearchKey(index)]?.searchTerm || supplierSearchStates[getSupplierSearchKey(index)]?.searchTerm === '') &&
+                                             supplierSearchStates[getSupplierSearchKey(index)]?.isOpen && (
+                                              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                                {getFilteredSuppliers().length === 0 ? (
+                                                  <div className="p-4 text-center text-gray-500">
+                                                    <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <p className="text-sm font-medium text-gray-600">Aucun fournisseur disponible</p>
+                                                    <p className="text-xs text-gray-500 mt-1">Aucun fournisseur trouvé</p>
+                                                  </div>
+                                                ) : (
+                                                  getFilteredSuppliers().map((supplier) => (
+                                                    <button
+                                                      key={supplier.id}
+                                                      type="button"
+                                                      onClick={() => selectSupplierFromSearch(index, supplier)}
+                                                      className="w-full px-3 py-3 text-left hover:bg-green-50 hover:text-green-800 transition-colors duration-150 border-b border-gray-100 last:border-b-0"
+                                                    >
+                                                      <div className="flex items-center justify-between">
+                                                        <span className="font-medium text-gray-900">{supplier.nom}</span>
+                                                        <div className="flex flex-wrap gap-1">
+                                                          {supplier.specialites?.map((spec, idx) => (
+                                                            <span key={idx} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                              {spec}
+                                                            </span>
+                                                          ))}
+                                                        </div>
+                                                      </div>
+                                                      {supplier.telephone && (
+                                                        <p className="text-sm text-gray-600 mt-1">📞 {supplier.telephone}</p>
+                                                      )}
+                                                      {supplier.email && (
+                                                        <p className="text-sm text-gray-600">📧 {supplier.email}</p>
+                                                      )}
+                                                    </button>
+                                                  ))
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {getFilteredSuppliers().length === 0 && (
+                                            <p className="mt-1 text-sm text-orange-600">
+                                              Aucun fournisseur n'est disponible
+                                            </p>
+                                          )}
                                         </div>
                                       )}
                                       
