@@ -10,7 +10,7 @@ import { faBell } from '@fortawesome/free-solid-svg-icons'
 
 function Layout({ onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const notificationRef = useRef(null)

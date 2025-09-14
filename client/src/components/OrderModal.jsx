@@ -175,12 +175,14 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           numero_pms: true,
           infograph_en_charge: true,
           agent_impression: true,
+          machine_impression: true,
           date_limite_livraison_estimee: false,
           etape: true,
           atelier_concerne: true,
           estimated_work_time_minutes: true,
           bat: true,
           express: true,
+          pack_fin_annee: true,
           commentaires: true,
           type_sous_traitance: true, // Visible to admin
           supplier_selection: true, // Visible to admin

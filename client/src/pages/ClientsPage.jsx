@@ -3,8 +3,11 @@ import { clientAPI, supplierAPI } from '../utils/api';
 import Button from '../components/ButtonComponent';
 import AlertDialog from '../components/AlertDialog';
 import * as XLSX from 'xlsx';
+import { useAuth } from '../contexts/AuthContext';
 
 const ClientsPage = () => {
+  const { user } = useAuth(); // Get current user
+  
   // Tab state
   const [activeTab, setActiveTab] = useState('clients'); // 'clients' or 'fournisseurs'
   
@@ -89,10 +92,17 @@ const ClientsPage = () => {
     if (activeTab === 'clients') {
       fetchClients();
       fetchStats();
-    } else {
+    } else if (activeTab === 'fournisseurs' && user?.role === 'admin') {
       fetchSuppliers();
     }
-  }, [filters, supplierFilters, activeTab]);
+  }, [filters, supplierFilters, activeTab, user?.role]);
+
+  // Redirect non-admin users to clients tab if they somehow access fournisseurs
+  useEffect(() => {
+    if (activeTab === 'fournisseurs' && user?.role !== 'admin') {
+      setActiveTab('clients');
+    }
+  }, [activeTab, user?.role]);
 
   const handleCreateClient = () => {
     setSelectedClient(null);
@@ -175,10 +185,10 @@ const ClientsPage = () => {
 
   // Add useEffect to update supplier stats when suppliers change
   useEffect(() => {
-    if (activeTab === 'fournisseurs' && suppliers.length > 0) {
+    if (activeTab === 'fournisseurs' && suppliers.length > 0 && user?.role === 'admin') {
       fetchSupplierStats();
     }
-  }, [suppliers, activeTab]);
+  }, [suppliers, activeTab, user?.role]);
 
   const handleCreateSupplier = () => {
     setSelectedSupplier(null);
@@ -217,6 +227,11 @@ const ClientsPage = () => {
 
   // Tab change handler
   const handleTabChange = (tab) => {
+    // Prevent non-admin users from accessing fournisseurs tab
+    if (tab === 'fournisseurs' && user?.role !== 'admin') {
+      return;
+    }
+    
     setActiveTab(tab);
     // Reset errors when switching tabs
     setError('');
@@ -240,7 +255,7 @@ const ClientsPage = () => {
     }
   };
 
-  if ((loading && activeTab === 'clients' && clients.length === 0) || (supplierLoading && activeTab === 'fournisseurs' && suppliers.length === 0)) {
+  if ((loading && activeTab === 'clients' && clients.length === 0) || (supplierLoading && activeTab === 'fournisseurs' && suppliers.length === 0 && user?.role === 'admin')) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-gray-500">
@@ -271,16 +286,19 @@ const ClientsPage = () => {
               >
                 Clients ({pagination.totalClients || 0})
               </button>
-              <button
-                onClick={() => handleTabChange('fournisseurs')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'fournisseurs'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Fournisseurs ({supplierPagination.totalCount || 0})
-              </button>
+              {/* Only show Fournisseurs tab for admin users */}
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => handleTabChange('fournisseurs')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'fournisseurs'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Fournisseurs ({supplierPagination.totalCount || 0})
+                </button>
+              )}
             </nav>
           </div>
         </div>
