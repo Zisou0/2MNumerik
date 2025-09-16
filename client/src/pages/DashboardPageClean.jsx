@@ -1201,8 +1201,8 @@ const DashboardPageClean = () => {
         commentaires: newComments
       }
 
-      // Use the actual product_id, not the orderProduct.id
-      await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.product_id, updateData)
+      // Use the unique orderProductId to identify the specific order product
+      await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.orderProductId, updateData)
 
       // Update local state to preserve filters
       setOrderProductRows(prevRows => 
@@ -2152,7 +2152,7 @@ const DashboardPageClean = () => {
     setItemToDelete({
       type: 'orderProduct',
       orderId: orderProductRow.orderId,
-      productId: orderProductRow.product_id,
+      orderProductId: orderProductRow.orderProductId, // Use orderProductId instead of product_id
       productName: orderProductRow.product_name,
       clientName: orderProductRow.client_info
     })
@@ -2164,7 +2164,7 @@ const DashboardPageClean = () => {
       try {
         if (itemToDelete.type === 'orderProduct') {
           // Delete specific order product
-          const response = await orderAPI.deleteOrderProduct(itemToDelete.orderId, itemToDelete.productId)
+          const response = await orderAPI.deleteOrderProduct(itemToDelete.orderId, itemToDelete.orderProductId)
           
           if (response.orderDeleted) {
             // Entire order was deleted because it was the last product
@@ -2172,7 +2172,7 @@ const DashboardPageClean = () => {
           } else {
             // Only the specific product was deleted
             setOrderProductRows(prev => prev.filter(row => 
-              !(row.orderId === itemToDelete.orderId && row.product_id === itemToDelete.productId)
+              !(row.orderId === itemToDelete.orderId && row.orderProductId === itemToDelete.orderProductId)
             ))
           }
         } else {
