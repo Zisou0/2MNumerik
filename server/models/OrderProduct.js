@@ -130,11 +130,12 @@ module.exports = (sequelize) => {
     tableName: 'order_products',
     timestamps: true,
     indexes: [
-      {
-        unique: true,
-        fields: ['order_id', 'product_id'],
-        name: 'unique_order_product'
-      }
+      // Removed unique constraint to allow duplicate products in orders
+      // {
+      //   unique: true,
+      //   fields: ['order_id', 'product_id'],
+      //   name: 'unique_order_product'
+      // }
     ]
   });
 

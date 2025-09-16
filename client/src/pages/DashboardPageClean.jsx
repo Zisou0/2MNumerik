@@ -300,6 +300,36 @@ const DashboardPageClean = () => {
       { value: 'annule', label: 'Annulé' }
     ]
   }
+
+  // Helper function to filter status options based on user role
+  const getStatusOptionsByRole = (atelierConcerne, currentStatus = null) => {
+    const baseOptions = getStatusOptionsByAtelier(atelierConcerne)
+    
+    // If user is commercial, show current status + allowed changes
+    if (user?.role === 'commercial') {
+      const allowedStatusValues = ['livre', 'annule']
+      const commercialOptions = []
+      
+      // Always include the current status first (if it exists and is not already in allowed list)
+      if (currentStatus && !allowedStatusValues.includes(currentStatus)) {
+        const currentOption = baseOptions.find(option => option.value === currentStatus)
+        if (currentOption) {
+          commercialOptions.push(currentOption)
+        }
+      }
+      
+      // Add the allowed status options
+      const allowedOptions = baseOptions.filter(option => 
+        allowedStatusValues.includes(option.value)
+      )
+      commercialOptions.push(...allowedOptions)
+      
+      return commercialOptions
+    }
+    
+    // For all other roles, return all available options
+    return baseOptions
+  }
   
   const batOptions = [
     { value: 'avec', label: 'Avec' },
@@ -912,12 +942,12 @@ const DashboardPageClean = () => {
     // Determine urgency level based on actual deadline
     if (timeUntilDeadline <= 0) {
       return 0 // Most urgent - past deadline (RED)
-    } else if (timeUntilDeadline > 0 && timeUntilDeadline <= 15 * 60 * 1000) {
-      return 1 // Very urgent - 15 minutes or less until deadline (ORANGE)
-    } else if (timeUntilDeadline > 15 * 60 * 1000 && timeUntilDeadline <= 30 * 60 * 1000) {
-      return 2 // Urgent - 30 minutes or less until deadline (YELLOW)
+    } else if (timeUntilDeadline > 0 && timeUntilDeadline <= 30 * 60 * 1000) {
+      return 1 // Very urgent - 30 minutes or less until deadline (ORANGE)
+    } else if (timeUntilDeadline > 30 * 60 * 1000 && timeUntilDeadline <= 60 * 60 * 1000) {
+      return 2 // Urgent - 1 hour or less until deadline (YELLOW)
     } else {
-      return 4 // Normal - more than 30 minutes until deadline (GRAY)
+      return 4 // Normal - more than 1 hour until deadline (GRAY)
     }
   }
 
@@ -971,8 +1001,8 @@ const DashboardPageClean = () => {
     if (isExpress) {
       switch (urgency) {
         case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-yellow-500' // Express past deadline
-        case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-yellow-500' // Express 15min until deadline
-        case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Express 30min until deadline
+        case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-yellow-500' // Express 30min until deadline
+        case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // Express 1h until deadline
         case 3: return 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500' // Express medium urgency
         case 4: return 'bg-yellow-50 hover:bg-yellow-100 border-l-4 border-yellow-500' // Express normal
         case 5:
@@ -983,10 +1013,10 @@ const DashboardPageClean = () => {
     // Non-express orders use regular styling
     switch (urgency) {
       case 0: return 'bg-red-200 hover:bg-red-300 border-l-4 border-red-500' // Past deadline
-      case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-orange-500' // 15min until deadline
-      case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // 30min until deadline
+      case 1: return 'bg-orange-200 hover:bg-orange-300 border-l-4 border-orange-500' // 30min until deadline
+      case 2: return 'bg-yellow-200 hover:bg-yellow-300 border-l-4 border-yellow-500' // 1h until deadline
       case 3: return 'bg-gray-50 hover:bg-gray-100' // Medium urgency - no deadline set
-      case 4: return 'bg-gray-50 hover:bg-gray-100' // Normal - more than 30min until deadline
+      case 4: return 'bg-gray-50 hover:bg-gray-100' // Normal - more than 1h until deadline
       case 5:
       default: return 'bg-gray-50 hover:bg-gray-100' // Least urgent or default
     }
@@ -1030,10 +1060,10 @@ const DashboardPageClean = () => {
     const editableFields = {
       admin: 'all', // Admin can edit everything
       commercial: [
-        'numero_affaire', 'numero_dm', 'commercial_en_charge', 'date_limite_livraison_attendue',
-        'quantity', 'numero_pms', 'statut', 'etape', 'atelier_concerne', 
-        'infograph_en_charge', 'estimated_work_time_minutes', 'bat', 'express', 'pack_fin_annee', 'commentaires', 'finitions'
-      ], // Commercial can edit everything except 'date_limite_livraison_estimee' (délais)
+        'numero_affaire', 'commercial_en_charge', 'date_limite_livraison_attendue',
+        'numero_pms', 'statut', 'atelier_concerne', 
+        'estimated_work_time_minutes', 'bat', 'express', 'pack_fin_annee', 'commentaires', 'finitions'
+      ], // Commercial can edit most fields except quantity, infograph_en_charge, numero_dm, etape, and date_limite_livraison_estimee (délais)
       infograph: [
         'quantity', 'numero_pms', 'statut', 'etape', 'atelier_concerne', 
         'infograph_en_charge', 'date_limite_livraison_estimee', 
@@ -1096,8 +1126,8 @@ const DashboardPageClean = () => {
       if (orderLevelFields.includes(field)) {
         await orderAPI.updateOrder(orderProductRow.orderId, { [field]: valueToSend })
       } else {
-        // Use the actual product_id, not the orderProduct.id
-        await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.product_id, { [field]: valueToSend })
+        // Use the unique orderProductId to identify the specific order product
+        await orderAPI.updateOrderProduct(orderProductRow.orderId, orderProductRow.orderProductId, { [field]: valueToSend })
       }
 
       // Update local state to avoid losing filters
@@ -1624,8 +1654,8 @@ const DashboardPageClean = () => {
     const isEditing = inlineEditing[editKey]
     const tempValue = tempValues[editKey]
 
-    // Get dynamic status options based on atelier_concerne
-    const dynamicStatusOptions = getStatusOptionsByAtelier(orderProductRow.atelier_concerne)
+    // Get dynamic status options based on atelier_concerne and user role
+    const dynamicStatusOptions = getStatusOptionsByRole(orderProductRow.atelier_concerne, orderProductRow.statut)
 
     if (isEditing) {
       return (
@@ -1634,6 +1664,23 @@ const DashboardPageClean = () => {
             value={tempValue || ''}
             onChange={(e) => {
               const newValue = e.target.value
+              const currentValue = orderProductRow.statut
+              
+              // For commercial users, add validation
+              if (user?.role === 'commercial') {
+                // If they select the same value as current, just cancel edit
+                if (newValue === currentValue) {
+                  cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+                  return
+                }
+                
+                // Only allow changing TO 'livre' or 'annule'
+                if (newValue !== 'livre' && newValue !== 'annule') {
+                  cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+                  return
+                }
+              }
+              
               handleTempValueChange(orderProductRow.orderProductId, 'statut', newValue)
               if (newValue === 'livre' || newValue === 'annule') {
                 setPendingStatusChange({ orderProductId: orderProductRow.orderProductId, newValue })
@@ -2305,13 +2352,17 @@ const DashboardPageClean = () => {
       setOrderProductRows(prev => {
         const filteredRows = prev.filter(row => row.orderId !== updatedOrder.id)
         
-        // Only add updated versions if the order should be visible based on current filters
-        if (updatedOrder.orderProducts && updatedOrder.orderProducts.length > 0 && 
-            updatedOrder.statut !== 'annule' && updatedOrder.statut !== 'livre') {
+        // Process each product individually, checking PRODUCT-level status
+        if (updatedOrder.orderProducts && updatedOrder.orderProducts.length > 0) {
           
           const updatedFlatRows = []
           updatedOrder.orderProducts.forEach(orderProduct => {
             const productStatus = orderProduct.statut || updatedOrder.statut
+            
+            // Skip products that are delivered or cancelled at the PRODUCT level
+            if (productStatus === 'livre' || productStatus === 'annule') {
+              return // Don't add this product to the dashboard
+            }
             
             const updatedRow = {
               orderProductId: orderProduct.id,

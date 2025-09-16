@@ -556,12 +556,13 @@ class OrderController {
 
       // Check if all products exist
       const productIds = products.map(p => p.productId);
+      const uniqueProductIds = [...new Set(productIds)]; // Remove duplicates for validation
       const existingProducts = await Product.findAll({
-        where: { id: productIds },
+        where: { id: uniqueProductIds },
         transaction
       });
 
-      if (existingProducts.length !== productIds.length) {
+      if (existingProducts.length !== uniqueProductIds.length) {
         await transaction.rollback();
         return res.status(400).json({ 
           message: 'Un ou plusieurs produits spécifiés n\'existent pas' 
@@ -824,12 +825,13 @@ class OrderController {
 
         // Check if all products exist
         const productIds = products.map(p => p.productId);
+        const uniqueProductIds = [...new Set(productIds)]; // Remove duplicates for validation
         const existingProducts = await Product.findAll({
-          where: { id: productIds },
+          where: { id: uniqueProductIds },
           transaction
         });
 
-        if (existingProducts.length !== productIds.length) {
+        if (existingProducts.length !== uniqueProductIds.length) {
           await transaction.rollback();
           return res.status(400).json({ 
             message: 'Un ou plusieurs produits spécifiés n\'existent pas' 
@@ -1329,7 +1331,7 @@ class OrderController {
     const transaction = await Order.sequelize.transaction();
     
     try {
-      const { orderId, productId } = req.params;
+      const { orderId, orderProductId } = req.params;
       const {
         quantity,
         numero_pms,
@@ -1348,11 +1350,11 @@ class OrderController {
         type_sous_traitance
       } = req.body;
 
-      // Find the order product
+      // Find the order product by its unique ID
       const orderProduct = await OrderProduct.findOne({
         where: {
-          order_id: orderId,
-          product_id: productId
+          id: orderProductId,
+          order_id: orderId
         },
         transaction
       });
@@ -1397,13 +1399,11 @@ class OrderController {
         }
       }
 
-      await transaction.commit();
-
       // Return updated order product with product info
       const updatedOrderProduct = await OrderProduct.findOne({
         where: {
-          order_id: orderId,
-          product_id: productId
+          id: orderProductId,
+          order_id: orderId
         },
         include: [
           {
@@ -1422,8 +1422,13 @@ class OrderController {
               }
             ]
           }
-        ]
-      });      // Emit real-time event for order product update
+        ],
+        transaction
+      });
+
+      await transaction.commit();
+
+      // Emit real-time event for order product update (after commit)
       const io = req.app.get('io');
       if (io) {
         // Check if product etape changed to 'conception' or 'pré-presse' for infograph notification
@@ -1436,7 +1441,7 @@ class OrderController {
           // Send specific notification to infograph users about new order product available
           io.to('role-infograph').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
-            productId: parseInt(productId),
+            productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
             fromEtape: originalEtape,
@@ -1450,7 +1455,7 @@ class OrderController {
           // Send specific notification to infograph users about new order product in pre-press
           io.to('role-infograph').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
-            productId: parseInt(productId),
+            productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
             fromEtape: originalEtape,
@@ -1467,7 +1472,7 @@ class OrderController {
           // Send specific notification to atelier users about new order product ready for printing
           io.to('role-atelier').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
-            productId: parseInt(productId),
+            productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
             fromEtape: originalEtape,
@@ -1495,7 +1500,7 @@ class OrderController {
           // Send specific notification to commercial users about completed order product
           io.to('role-commercial').emit('orderStatusChanged', {
             orderId: parseInt(orderId),
-            productId: parseInt(productId),
+            productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
             client: orderWithClient?.client || orderWithClient?.clientInfo?.nom || 'Client non spécifié',
@@ -1547,7 +1552,10 @@ class OrderController {
         orderProduct: updatedOrderProduct
       });
     } catch (error) {
-      await transaction.rollback();
+      // Only rollback if transaction is still active
+      if (!transaction.finished) {
+        await transaction.rollback();
+      }
       console.error('Update order product error:', error);
       res.status(500).json({ message: 'Erreur serveur' });
     }
@@ -1558,13 +1566,13 @@ class OrderController {
     const transaction = await Order.sequelize.transaction();
     
     try {
-      const { orderId, productId } = req.params;
+      const { orderId, orderProductId } = req.params;
       
-      // Find the order product
+      // Find the order product by its unique ID
       const orderProduct = await OrderProduct.findOne({
         where: {
-          order_id: orderId,
-          product_id: productId
+          id: orderProductId,
+          order_id: orderId
         },
         transaction
       });

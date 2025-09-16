@@ -15,8 +15,8 @@ router.get('/history/stats', OrderController.getHistoryOrderStats);
 router.get('/:id', OrderController.getOrderById);
 router.post('/', OrderController.createOrder);
 router.put('/:id', OrderController.updateOrder);
-router.put('/:orderId/products/:productId', OrderController.updateOrderProduct);
-router.delete('/:orderId/products/:productId', OrderController.deleteOrderProduct);
+router.put('/:orderId/products/:orderProductId', OrderController.updateOrderProduct);
+router.delete('/:orderId/products/:orderProductId', OrderController.deleteOrderProduct);
 router.delete('/:id', OrderController.deleteOrder);
 
 module.exports = router;
