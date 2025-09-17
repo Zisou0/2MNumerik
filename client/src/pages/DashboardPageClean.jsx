@@ -301,8 +301,29 @@ const DashboardPageClean = () => {
     ]
   }
 
-  // Helper function to filter status options based on user role
-  const getStatusOptionsByRole = (atelierConcerne, currentStatus = null) => {
+  // Helper function to check if 'termine' status can be selected
+  const canSelectTermineStatus = (atelierConcerne, etape, userRole = null) => {
+    // Special case: infograph users can always select 'termine' for 'service crea'
+    if (userRole === 'infograph' && atelierConcerne === 'service crea') {
+      return true
+    }
+    
+    // If atelier is 'sous-traitance', check if 'controle qualité' etape is done
+    if (atelierConcerne === 'sous-traitance') {
+      return etape === 'controle qualité'
+    }
+    
+    // For other ateliers (petit format, grand format, service crea), check if finitions are done
+    if (['petit format', 'grand format', 'service crea'].includes(atelierConcerne)) {
+      return etape === 'finition'
+    }
+    
+    // Default case - allow completion if we don't have specific rules
+    return true
+  }
+
+  // Helper function to filter status options based on user role and business rules
+  const getStatusOptionsByRole = (atelierConcerne, currentStatus = null, currentEtape = null) => {
     const baseOptions = getStatusOptionsByAtelier(atelierConcerne)
     
     // If user is commercial, show current status + allowed changes
@@ -327,8 +348,23 @@ const DashboardPageClean = () => {
       return commercialOptions
     }
     
-    // For all other roles, return all available options
-    return baseOptions
+    // For atelier and infograph roles, filter out 'livre' status
+    const filteredOptions = baseOptions.filter(option => {
+      // Filter out 'livre' status for atelier and infograph users
+      if (option.value === 'livre' && (user?.role === 'atelier' || user?.role === 'infograph')) {
+        // Only show 'livre' if it's the current status (to display current state)
+        return currentStatus === 'livre'
+      }
+      
+      // If it's the 'termine' status, check if it can be selected
+      if (option.value === 'termine') {
+        return canSelectTermineStatus(atelierConcerne, currentEtape, user?.role)
+      }
+      
+      return true
+    })
+    
+    return filteredOptions
   }
   
   const batOptions = [
@@ -1654,8 +1690,8 @@ const DashboardPageClean = () => {
     const isEditing = inlineEditing[editKey]
     const tempValue = tempValues[editKey]
 
-    // Get dynamic status options based on atelier_concerne and user role
-    const dynamicStatusOptions = getStatusOptionsByRole(orderProductRow.atelier_concerne, orderProductRow.statut)
+    // Get dynamic status options based on atelier_concerne, user role, and current etape
+    const dynamicStatusOptions = getStatusOptionsByRole(orderProductRow.atelier_concerne, orderProductRow.statut, orderProductRow.etape)
 
     if (isEditing) {
       return (
@@ -1679,6 +1715,28 @@ const DashboardPageClean = () => {
                   cancelInlineEdit(orderProductRow.orderProductId, 'statut')
                   return
                 }
+              }
+              
+              // Validation for atelier and infograph users - cannot change to 'livre'
+              if (newValue === 'livre' && (user?.role === 'atelier' || user?.role === 'infograph')) {
+                setError('Vous n\'avez pas l\'autorisation de changer le statut vers "livré". Seuls les administrateurs et commerciaux peuvent effectuer cette action.')
+                cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+                return
+              }
+              
+              // Additional validation for 'termine' status
+              if (newValue === 'termine' && !canSelectTermineStatus(orderProductRow.atelier_concerne, orderProductRow.etape, user?.role)) {
+                let errorMessage = 'Impossible de marquer comme terminé. '
+                
+                if (orderProductRow.atelier_concerne === 'sous-traitance') {
+                  errorMessage += 'L\'étape "contrôle qualité" doit être terminée.'
+                } else {
+                  errorMessage += 'L\'étape "finition" doit être terminée.'
+                }
+                
+                setError(errorMessage)
+                cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+                return
               }
               
               handleTempValueChange(orderProductRow.orderProductId, 'statut', newValue)

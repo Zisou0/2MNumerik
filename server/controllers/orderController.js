@@ -1326,6 +1326,27 @@ class OrderController {
     }
   }
 
+  // Helper function to check if finitions are completed for status change to 'termine'
+  static async checkFinitionsCompleted(orderProductId, atelierConcerne, etape, userRole = null) {
+    // Special case: infograph users can always mark 'service crea' as 'termine'
+    if (userRole === 'infograph' && atelierConcerne === 'service crea') {
+      return true;
+    }
+    
+    // If atelier is 'sous-traitance', check if 'controle qualité' etape is done
+    if (atelierConcerne === 'sous-traitance') {
+      return etape === 'controle qualité';
+    }
+    
+    // For other ateliers (petit format, grand format, service crea), check if finitions are done
+    if (['petit format', 'grand format', 'service crea'].includes(atelierConcerne)) {
+      return etape === 'finition';
+    }
+    
+    // Default case - allow completion if we don't have specific rules
+    return true;
+  }
+
   // Update individual order product
   static async updateOrderProduct(req, res) {
     const transaction = await Order.sequelize.transaction();
@@ -1368,8 +1389,46 @@ class OrderController {
       const originalEtape = orderProduct.etape;
       const originalStatus = orderProduct.statut;
 
+      // Validation: Check if trying to change status to 'termine'
+      if (statut === 'termine' && originalStatus !== 'termine') {
+        const currentAtelier = atelier_concerne || orderProduct.atelier_concerne;
+        const currentEtape = etape !== undefined ? etape : orderProduct.etape;
+        const userRole = req.user.role;
+        
+        const finitionsCompleted = await OrderController.checkFinitionsCompleted(
+          orderProductId, 
+          currentAtelier, 
+          currentEtape,
+          userRole
+        );
+        
+        if (!finitionsCompleted) {
+          await transaction.rollback();
+          let errorMessage = 'Impossible de marquer comme terminé. ';
+          
+          if (currentAtelier === 'sous-traitance') {
+            errorMessage += 'L\'étape "contrôle qualité" doit être terminée.';
+          } else {
+            errorMessage += 'L\'étape "finition" doit être terminée.';
+          }
+          
+          return res.status(400).json({ message: errorMessage });
+        }
+      }
+
       // Check permissions
       const userRole = req.user.role;
+      
+      // Validation: Check if trying to change status to 'livre'
+      if (statut === 'livre' && originalStatus !== 'livre') {
+        if (userRole === 'atelier' || userRole === 'infograph') {
+          await transaction.rollback();
+          return res.status(403).json({ 
+            message: 'Vous n\'avez pas l\'autorisation de changer le statut vers "livré". Seuls les administrateurs et commerciaux peuvent effectuer cette action.' 
+          });
+        }
+      }
+      
       // Removed infograph assignment restrictions - any infograph can edit any product
 
       // Update the order product
@@ -1391,13 +1450,8 @@ class OrderController {
         type_sous_traitance
       }, { transaction });
 
-      // Update overall order status if product status changed
-      if (statut) {
-        const order = await Order.findByPk(orderId, { transaction });
-        if (order) {
-          await order.updateStatusFromProducts();
-        }
-      }
+      // Note: Removed automatic order status update to keep status at product level
+      // Individual product statuses remain independent of overall order status
 
       // Return updated order product with product info
       const updatedOrderProduct = await OrderProduct.findOne({
@@ -1438,12 +1492,24 @@ class OrderController {
                                               etape === 'pré-presse';
         
         if (productEtapeChangedToConception) {
+          // Fetch complete order with client info for notification
+          const orderWithClient = await Order.findByPk(orderId, {
+            include: [
+              {
+                model: Client,
+                as: 'clientInfo',
+                attributes: ['id', 'nom', 'code_client']
+              }
+            ]
+          });
+          
           // Send specific notification to infograph users about new order product available
           io.to('role-infograph').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
+            client: orderWithClient?.client || orderWithClient?.clientInfo?.nom || 'Client non spécifié',
             fromEtape: originalEtape,
             toEtape: 'conception',
             message: 'Nouveau produit disponible en conception',
@@ -1452,12 +1518,24 @@ class OrderController {
         }
         
         if (productEtapeChangedToPrePress) {
+          // Fetch complete order with client info for notification
+          const orderWithClient = await Order.findByPk(orderId, {
+            include: [
+              {
+                model: Client,
+                as: 'clientInfo',
+                attributes: ['id', 'nom', 'code_client']
+              }
+            ]
+          });
+          
           // Send specific notification to infograph users about new order product in pre-press
           io.to('role-infograph').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
+            client: orderWithClient?.client || orderWithClient?.clientInfo?.nom || 'Client non spécifié',
             fromEtape: originalEtape,
             toEtape: 'pré-presse',
             message: 'Nouveau produit disponible en pré-presse',
@@ -1469,12 +1547,24 @@ class OrderController {
         const productEtapeChangedToImpression = originalEtape !== 'impression' && etape === 'impression';
         
         if (productEtapeChangedToImpression) {
+          // Fetch complete order with client info for notification
+          const orderWithClient = await Order.findByPk(orderId, {
+            include: [
+              {
+                model: Client,
+                as: 'clientInfo',
+                attributes: ['id', 'nom', 'code_client']
+              }
+            ]
+          });
+          
           // Send specific notification to atelier users about new order product ready for printing
           io.to('role-atelier').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
+            client: orderWithClient?.client || orderWithClient?.clientInfo?.nom || 'Client non spécifié',
             fromEtape: originalEtape,
             toEtape: 'impression',
             message: 'Nouveau produit prêt pour impression',

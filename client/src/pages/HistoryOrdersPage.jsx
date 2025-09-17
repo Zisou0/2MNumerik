@@ -121,14 +121,14 @@ const HistoryOrdersPage = () => {
 
   const saveInlineEdit = async (orderProductId, field, newValue) => {
     try {
-      // Find the row to get orderId and product_id
+      // Find the row to get orderId and orderProductId
       const row = orderProductRows.find(r => r.orderProductId === orderProductId)
       if (!row) {
         throw new Error('Order product not found')
       }
       
       const data = { [field]: newValue }
-      await orderAPI.updateOrderProduct(row.orderId, row.product_id, data)
+      await orderAPI.updateOrderProduct(row.orderId, row.orderProductId, data)
       
       // Update the local state
       setOrderProductRows(prev => prev.map(row => 
