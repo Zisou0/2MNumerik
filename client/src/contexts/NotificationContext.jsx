@@ -23,6 +23,17 @@ export const NotificationProvider = ({ children }) => {
     audioRef.current = new Audio();
     audioRef.current.volume = 1.0; // Maximum volume
 
+    // Log security context information for debugging
+    console.log('🔍 Notification Debug Info:');
+    console.log('  - URL:', window.location.href);
+    console.log('  - Protocol:', window.location.protocol);
+    console.log('  - Hostname:', window.location.hostname);
+    console.log('  - Is Secure Context:', window.isSecureContext);
+    console.log('  - Notification Support:', 'Notification' in window);
+    if ('Notification' in window) {
+      console.log('  - Permission Status:', Notification.permission);
+    }
+
     // Check if browser supports notifications
     if ('Notification' in window) {
       setPermissionStatus(Notification.permission);
