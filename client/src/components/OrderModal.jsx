@@ -20,6 +20,15 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     return localDate.toISOString().slice(0, 16)
   }
 
+  // Helper function to get today's date at 00:00 in local datetime-local format
+  const getTodayAt00 = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) // Set time to 00:00:00.000
+    const timezoneOffset = today.getTimezoneOffset() * 60000
+    const localDate = new Date(today.getTime() - timezoneOffset)
+    return localDate.toISOString().slice(0, 16)
+  }
+
   // Helper function to convert datetime-local string to ISO string for API
   const toISOString = (localDateTimeString) => {
     if (!localDateTimeString) return ''
@@ -429,7 +438,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       numero_pms: '',
       infograph_en_charge: '',
       agent_impression: '',
-      date_limite_livraison_estimee: orderFormData.date_limite_livraison_estimee || '',
+      date_limite_livraison_estimee: orderFormData.date_limite_livraison_estimee || getTodayAt00(),
       etape: 'pré-presse',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
@@ -1099,7 +1108,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                       <Input
                         label="Date limite de livraison estimée"
                         type="datetime-local"
-                        value={orderFormData.date_limite_livraison_estimee}
+                        value={orderFormData.date_limite_livraison_estimee || getTodayAt00()}
                         onChange={(e) => handleOrderFormChange('date_limite_livraison_estimee', e.target.value)}
                       />
                     )}

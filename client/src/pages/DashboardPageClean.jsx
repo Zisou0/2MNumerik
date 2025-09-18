@@ -328,22 +328,29 @@ const DashboardPageClean = () => {
     
     // If user is commercial, show current status + allowed changes
     if (user?.role === 'commercial') {
-      const allowedStatusValues = ['livre', 'annule']
       const commercialOptions = []
       
-      // Always include the current status first (if it exists and is not already in allowed list)
-      if (currentStatus && !allowedStatusValues.includes(currentStatus)) {
+      // Always include the current status first (if it exists)
+      if (currentStatus) {
         const currentOption = baseOptions.find(option => option.value === currentStatus)
         if (currentOption) {
           commercialOptions.push(currentOption)
         }
       }
       
-      // Add the allowed status options
-      const allowedOptions = baseOptions.filter(option => 
-        allowedStatusValues.includes(option.value)
-      )
-      commercialOptions.push(...allowedOptions)
+      // Add 'livre' option only if current status is 'termine'
+      if (currentStatus === 'termine') {
+        const livreOption = baseOptions.find(option => option.value === 'livre')
+        if (livreOption && !commercialOptions.some(opt => opt.value === 'livre')) {
+          commercialOptions.push(livreOption)
+        }
+      }
+      
+      // Always add 'annule' option (commercial can cancel from any status)
+      const annuleOption = baseOptions.find(option => option.value === 'annule')
+      if (annuleOption && !commercialOptions.some(opt => opt.value === 'annule')) {
+        commercialOptions.push(annuleOption)
+      }
       
       return commercialOptions
     }
@@ -1709,9 +1716,16 @@ const DashboardPageClean = () => {
                   cancelInlineEdit(orderProductRow.orderProductId, 'statut')
                   return
                 }
-                
+                 
                 // Only allow changing TO 'livre' or 'annule'
                 if (newValue !== 'livre' && newValue !== 'annule') {
+                  cancelInlineEdit(orderProductRow.orderProductId, 'statut')
+                  return
+                }
+                
+                // Additional restriction: can only change to 'livre' if current status is 'termine'
+                if (newValue === 'livre' && currentValue !== 'termine') {
+                  setError('Vous ne pouvez changer le statut vers "livré" que si le statut actuel est "terminé".')
                   cancelInlineEdit(orderProductRow.orderProductId, 'statut')
                   return
                 }
