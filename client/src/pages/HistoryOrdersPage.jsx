@@ -1,11 +1,114 @@
-import React, { useState, useEffect } from 'react'
-import { orderAPI } from '../utils/api'
+import React, { useState, useEffect, useRef } from 'react'
+import { orderAPI, userAPI } from '../utils/api'
 import Button from '../components/ButtonComponent'
 import AlertDialog from '../components/AlertDialog'
 import { useAuth } from '../contexts/AuthContext'
 import { useWebSocket } from '../contexts/WebSocketContext'
 import OrderViewModal from '../components/OrderViewModal'
 import WebSocketStatus from '../components/WebSocketStatus'
+
+// Multi-select filter component
+const MultiSelectFilter = ({ options, selectedValues, onChange, placeholder, className }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  const handleToggleOption = (value) => {
+    const newSelectedValues = selectedValues.includes(value)
+      ? selectedValues.filter(v => v !== value)
+      : [...selectedValues, value]
+    onChange(newSelectedValues)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedValues.length === options.length) {
+      onChange([])
+    } else {
+      onChange(options.map(opt => typeof opt === 'string' ? opt : opt.value))
+    }
+  }
+
+  const getDisplayText = () => {
+    if (selectedValues.length === 0) {
+      return placeholder
+    } else if (selectedValues.length === 1) {
+      const option = options.find(opt => 
+        (typeof opt === 'string' ? opt : opt.value) === selectedValues[0]
+      )
+      return typeof option === 'string' ? option : option?.label || selectedValues[0]
+    } else {
+      return `${selectedValues.length} sélectionné(s)`
+    }
+  }
+
+  return (
+    <div className={`relative ${className}`} ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white text-left w-full flex items-center justify-between"
+      >
+        <span className={selectedValues.length === 0 ? 'text-gray-500' : 'text-gray-900'}>
+          {getDisplayText()}
+        </span>
+        <svg 
+          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+          <div className="px-3 py-2 border-b border-gray-200">
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              {selectedValues.length === options.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+            </button>
+          </div>
+          {options.map((option) => {
+            const value = typeof option === 'string' ? option : option.value
+            const label = typeof option === 'string' ? option : option.label
+            const isSelected = selectedValues.includes(value)
+            
+            return (
+              <label
+                key={value}
+                className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => handleToggleOption(value)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                />
+                <span className="text-sm text-gray-900">{label}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const HistoryOrdersPage = () => {
   const { user } = useAuth()
@@ -21,18 +124,18 @@ const HistoryOrdersPage = () => {
   const [orderToDelete, setOrderToDelete] = useState(null)
   const [filters, setFilters] = useState({
     statut: '', // 'termine', 'livre', 'annule' or '' for all history
-    commercial: '',
+    commercial: [], // Changed to array for multi-select
     client: '',
-    atelier: '',
-    infographe: '',
-    etape: '',
+    atelier: [], // Changed to array for multi-select
+    infographe: [], // Changed to array for multi-select
+    etape: [], // Changed to array for multi-select
     search: '',
-    agent_impression: '',
+    agent_impression: [], // Changed to array for multi-select
     machine_impression: '',
     bat: '',
     express: '',
     pack_fin_annee: '',
-    type_sous_traitance: ''
+    type_sous_traitance: [] // Changed to array for multi-select
   })
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -40,6 +143,11 @@ const HistoryOrdersPage = () => {
     totalOrders: 0
   })
   const [stats, setStats] = useState({})
+  
+  // Users for dropdowns
+  const [commercialUsers, setCommercialUsers] = useState([])
+  const [infographUsers, setInfographUsers] = useState([])
+  const [atelierUsers, setAtelierUsers] = useState([])
 
   // Inline editing state
   const [inlineEditing, setInlineEditing] = useState({})
@@ -334,14 +442,43 @@ const HistoryOrdersPage = () => {
         limit: 10
       }
 
+      // Convert array filters to comma-separated strings for backend compatibility
+      const processedFilters = { ...historyFilters }
+      if (Array.isArray(processedFilters.atelier) && processedFilters.atelier.length > 0) {
+        processedFilters.atelier = processedFilters.atelier.join(',')
+      }
+      if (Array.isArray(processedFilters.etape) && processedFilters.etape.length > 0) {
+        processedFilters.etape = processedFilters.etape.join(',')
+      }
+      if (Array.isArray(processedFilters.type_sous_traitance) && processedFilters.type_sous_traitance.length > 0) {
+        processedFilters.type_sous_traitance = processedFilters.type_sous_traitance.join(',')
+      }
+      if (Array.isArray(processedFilters.commercial) && processedFilters.commercial.length > 0) {
+        processedFilters.commercial = processedFilters.commercial.join(',')
+      }
+      if (Array.isArray(processedFilters.infographe) && processedFilters.infographe.length > 0) {
+        processedFilters.infographe = processedFilters.infographe.join(',')
+      }
+      if (Array.isArray(processedFilters.agent_impression) && processedFilters.agent_impression.length > 0) {
+        processedFilters.agent_impression = processedFilters.agent_impression.join(',')
+      }
+
       // Remove empty filters
-      Object.keys(historyFilters).forEach(key => {
-        if (historyFilters[key] === '') {
-          delete historyFilters[key]
+      Object.keys(processedFilters).forEach(key => {
+        if (Array.isArray(processedFilters[key])) {
+          // For array filters, remove if empty array
+          if (processedFilters[key].length === 0) {
+            delete processedFilters[key]
+          }
+        } else {
+          // For string filters, remove if empty string
+          if (processedFilters[key] === '') {
+            delete processedFilters[key]
+          }
         }
       })
 
-      const response = await orderAPI.getHistoryOrders(historyFilters)
+      const response = await orderAPI.getHistoryOrders(processedFilters)
       
       // Flatten the response orders to order-product rows
       const flatRows = []
@@ -412,10 +549,31 @@ const HistoryOrdersPage = () => {
     }
   }
 
+  // Fetch users by role for dropdowns
+  const fetchUsersByRole = async () => {
+    try {
+      const [commercialResponse, infographResponse, atelierResponse] = await Promise.all([
+        userAPI.getUsers({ role: 'commercial' }),
+        userAPI.getUsers({ role: 'infograph' }),
+        userAPI.getUsers({ role: 'atelier' })
+      ])
+      setCommercialUsers(commercialResponse.users || [])
+      setInfographUsers(infographResponse.users || [])
+      setAtelierUsers(atelierResponse.users || [])
+    } catch (err) {
+      console.error('Erreur lors du chargement des utilisateurs:', err)
+    }
+  }
+
   useEffect(() => {
     fetchHistoryOrders()
     fetchHistoryStats()
   }, [filters])
+
+  // Fetch users once on component mount
+  useEffect(() => {
+    fetchUsersByRole()
+  }, [])
 
   // WebSocket event listeners for real-time updates
   useEffect(() => {
@@ -671,7 +829,7 @@ const HistoryOrdersPage = () => {
           )}
           
           <div className="flex flex-wrap gap-3 items-center">
-            {/* PMS Search Field */}
+            {/* 1. PMS Search Field */}
             <div className="relative">
               <input
                 type="text"
@@ -685,6 +843,61 @@ const HistoryOrdersPage = () => {
               </svg>
             </div>
 
+            {/* 2. Client Filter */}
+            <input
+              type="text"
+              placeholder="Client"
+              value={filters.client}
+              onChange={(e) => setFilters({...filters, client: e.target.value})}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+
+            {/* 3. Commercial Filter */}
+            <MultiSelectFilter
+              options={commercialUsers.map(user => ({ value: user.username, label: user.username }))}
+              selectedValues={filters.commercial}
+              onChange={(values) => setFilters({...filters, commercial: values})}
+              placeholder="Commercial"
+              className="w-48"
+            />
+
+            {/* 4. Infographe Filter */}
+            <MultiSelectFilter
+              options={infographUsers.map(user => ({ value: user.username, label: user.username }))}
+              selectedValues={filters.infographe}
+              onChange={(values) => setFilters({...filters, infographe: values})}
+              placeholder="Infographe"
+              className="w-48"
+            />
+
+            {/* 5. Agent Impression Filter */}
+            <MultiSelectFilter
+              options={atelierUsers.map(user => ({ value: user.username, label: user.username }))}
+              selectedValues={filters.agent_impression}
+              onChange={(values) => setFilters({ ...filters, agent_impression: values })}
+              placeholder="Agent impression"
+              className="w-48"
+            />
+
+            {/* 6. Workshop Filter - Tous les ateliers */}
+            <MultiSelectFilter
+              options={atelierOptions}
+              selectedValues={filters.atelier}
+              onChange={(values) => setFilters({...filters, atelier: values})}
+              placeholder="Tous les ateliers"
+              className="w-48"
+            />
+
+            {/* 7. Etape Filter - Toutes les étapes */}
+            <MultiSelectFilter
+              options={etapeOptions}
+              selectedValues={filters.etape}
+              onChange={(values) => setFilters({...filters, etape: values})}
+              placeholder="Toutes les étapes"
+              className="w-48"
+            />
+
+            {/* 8. Status Filter - Tous les statuts */}
             <select
               value={filters.statut}
               onChange={(e) => setFilters({...filters, statut: e.target.value})}
@@ -697,78 +910,17 @@ const HistoryOrdersPage = () => {
                 </option>
               ))}
             </select>
-            
-            <input
-              type="text"
-              placeholder="Commercial"
-              value={filters.commercial}
-              onChange={(e) => setFilters({...filters, commercial: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-            
-            <input
-              type="text"
-              placeholder="Client"
-              value={filters.client}
-              onChange={(e) => setFilters({...filters, client: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+
+            {/* 9. Type Sous-traitance Filter */}
+            <MultiSelectFilter
+              options={sousTraitanceOptions}
+              selectedValues={filters.type_sous_traitance}
+              onChange={(values) => setFilters({...filters, type_sous_traitance: values})}
+              placeholder="Type sous-traitance"
+              className="w-48"
             />
 
-            <input
-              type="text"
-              placeholder="Infographe"
-              value={filters.infographe}
-              onChange={(e) => setFilters({...filters, infographe: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-            
-            <select
-              value={filters.atelier}
-              onChange={(e) => setFilters({...filters, atelier: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              <option value="">Tous les ateliers</option>
-              {atelierOptions.map(atelier => (
-                <option key={atelier} value={atelier}>
-                  {atelier}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={filters.etape}
-              onChange={(e) => setFilters({...filters, etape: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              <option value="">Toutes les étapes</option>
-              {etapeOptions.map(etape => (
-                <option key={etape} value={etape}>
-                  {etape}
-                </option>
-              ))}
-            </select>
-
-            {/* Agent Impression Filter */}
-            <input
-              type="text"
-              placeholder="Agent impression"
-              value={filters.agent_impression}
-              onChange={(e) => setFilters({ ...filters, agent_impression: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-
-            {/* Machine Impression Filter - Only visible for admin and atelier users */}
-            {(user?.role === 'admin' || user?.role === 'atelier') && (
-              <input
-                type="text"
-                placeholder="Machine impression"
-                value={filters.machine_impression}
-                onChange={(e) => setFilters({ ...filters, machine_impression: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            )}
-
-            {/* Express Filter */}
+            {/* 10. Express Filter - Toutes les urgences */}
             <select
               value={filters.express || ''}
               onChange={(e) => setFilters({ ...filters, express: e.target.value })}
@@ -779,7 +931,7 @@ const HistoryOrdersPage = () => {
               <option value="non">Non express</option>
             </select>
 
-            {/* BAT Filter */}
+            {/* 11. BAT Filter - Tous les BAT */}
             <select
               value={filters.bat || ''}
               onChange={(e) => setFilters({ ...filters, bat: e.target.value })}
@@ -790,7 +942,7 @@ const HistoryOrdersPage = () => {
               <option value="sans">Sans BAT</option>
             </select>
 
-            {/* Pack Fin d'Année Filter */}
+            {/* 12. Pack Fin d'Année Filter */}
             <select
               value={filters.pack_fin_annee || ''}
               onChange={(e) => setFilters({ ...filters, pack_fin_annee: e.target.value })}
@@ -801,37 +953,34 @@ const HistoryOrdersPage = () => {
               <option value="false">Non</option>
             </select>
 
-            {/* Type Sous-traitance Filter */}
-            <select
-              value={filters.type_sous_traitance || ''}
-              onChange={(e) => setFilters({ ...filters, type_sous_traitance: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              <option value="">Type sous-traitance</option>
-              {sousTraitanceOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            {/* 13. Machine Impression Filter - Only visible for admin and atelier users */}
+            {(user?.role === 'admin' || user?.role === 'atelier') && (
+              <input
+                type="text"
+                placeholder="Machine impression"
+                value={filters.machine_impression}
+                onChange={(e) => setFilters({ ...filters, machine_impression: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            )}
 
             {/* Clear Filters Button */}
-            {Object.values(filters).some(v => v !== '') && (
+            {(Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : v !== '')) && (
               <button
                 onClick={() => setFilters({
                   statut: '',
-                  commercial: '',
+                  commercial: [], // Reset to empty array
                   client: '',
-                  atelier: '',
-                  infographe: '',
-                  etape: '',
+                  atelier: [], // Reset to empty array
+                  infographe: [], // Reset to empty array
+                  etape: [], // Reset to empty array
                   search: '',
-                  agent_impression: '',
+                  agent_impression: [], // Reset to empty array
                   machine_impression: '',
                   bat: '',
                   express: '',
                   pack_fin_annee: '',
-                  type_sous_traitance: ''
+                  type_sous_traitance: [] // Reset to empty array
                 })}
                 className="text-sm text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-md transition-colors duration-200"
               >

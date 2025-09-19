@@ -1170,7 +1170,10 @@ class OrderController {
       }
       
       // Apply other product-level filters with multi-select support
-      if (atelier) productWhere.atelier_concerne = atelier;
+      if (atelier) {
+        const atelierValues = atelier.includes(',') ? atelier.split(',') : [atelier];
+        productWhere.atelier_concerne = { [Op.in]: atelierValues };
+      }
       
       // Handle infograph filter - support multiple values
       if (infographe) {
@@ -1184,13 +1187,24 @@ class OrderController {
         productWhere.agent_impression = { [Op.in]: agentValues };
       }
       if (machine_impression) productWhere.machine_impression = { [Op.like]: `%${machine_impression}%` };
-      if (etape) productWhere.etape = etape;
+      
+      // Handle etape filter - support multiple values
+      if (etape) {
+        const etapeValues = etape.includes(',') ? etape.split(',') : [etape];
+        productWhere.etape = { [Op.in]: etapeValues };
+      }
+      
       if (express) productWhere.express = express;
       if (bat) productWhere.bat = bat;
       if (pack_fin_annee !== undefined && pack_fin_annee !== '') {
         productWhere.pack_fin_annee = pack_fin_annee === 'true';
       }
-      if (type_sous_traitance) productWhere.type_sous_traitance = type_sous_traitance;
+      
+      // Handle type_sous_traitance filter - support multiple values
+      if (type_sous_traitance) {
+        const sousTraitanceValues = type_sous_traitance.includes(',') ? type_sous_traitance.split(',') : [type_sous_traitance];
+        productWhere.type_sous_traitance = { [Op.in]: sousTraitanceValues };
+      }
       
       // PMS Search
       if (search) {
