@@ -3191,6 +3191,7 @@ const DashboardPageClean = () => {
           onEdit={() => {
             setShowViewModal(false)
             setShowEditModal(true)
+            // Keep selectedOrderProduct when transitioning from view to edit
           }}
           formatDate={formatDate}
           getStatusBadge={getStatusBadge}
@@ -3201,10 +3202,12 @@ const DashboardPageClean = () => {
       {(showCreateModal || showEditModal) && (
         <OrderModal
           order={selectedOrder}
+          selectedOrderProduct={selectedOrderProduct}
           onClose={() => {
             setShowCreateModal(false)
             setShowEditModal(false)
             setSelectedOrder(null)
+            setSelectedOrderProduct(null)
           }}
           onSave={() => {
             // Refresh data without resetting filters
@@ -3213,6 +3216,7 @@ const DashboardPageClean = () => {
             setShowCreateModal(false)
             setShowEditModal(false)
             setSelectedOrder(null)
+            setSelectedOrderProduct(null)
           }}
           statusOptions={statusOptions}
           atelierOptions={atelierOptions}

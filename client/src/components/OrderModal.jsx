@@ -6,7 +6,7 @@ import Input from './InputComponent'
 import ClientSearch from './ClientSearch'
 import AgentSelector from './AgentSelector'
 
-const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, etapeOptions, batOptions, expressOptions }) => {
+const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, etapeOptions, batOptions, expressOptions, selectedOrderProduct = null }) => {
   const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState(1) // 1 = Order Info, 2 = Product Info
   
@@ -279,7 +279,12 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       
       // If editing existing order with products, populate selectedProducts
       if (order.orderProducts && order.orderProducts.length > 0) {
-        const orderProducts = order.orderProducts.map(orderProduct => {
+        // If a specific order product is selected, only show that one
+        const productsToEdit = selectedOrderProduct 
+          ? order.orderProducts.filter(op => op.id === selectedOrderProduct.id)
+          : order.orderProducts;
+          
+        const orderProducts = productsToEdit.map(orderProduct => {
           // Convert finitions data - handle both old and new format
           let finitions = [];
           if (orderProduct.orderProductFinitions && orderProduct.orderProductFinitions.length > 0) {
@@ -334,7 +339,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         commercial_en_charge: user?.username || ''
       }))
     }
-  }, [order, user])
+  }, [order, user, selectedOrderProduct])
 
   // Handle click outside for finition and product search dropdowns
   useEffect(() => {
@@ -992,9 +997,20 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                 <div>
                   <h3 className="text-2xl font-bold tracking-tight">
                     {order ? 'Modifier la commande' : 'Nouvelle commande'}
+                    {selectedOrderProduct && (
+                      <span className="text-lg font-normal ml-2 text-blue-100">
+                        - Produit sélectionné
+                      </span>
+                    )}
                   </h3>
                   <p className="text-blue-100 text-sm mt-1 font-medium">
-                    {order ? `Commande ${order.numero_pms}` : 'Créer une nouvelle commande dans le système'}
+                    {order ? (
+                      selectedOrderProduct 
+                        ? `Modification du produit "${selectedOrderProduct.productInfo?.name || selectedOrderProduct.product?.name || 'sans nom'}" - Commande ${order.numero_pms}`
+                        : `Commande ${order.numero_pms}`
+                    ) : (
+                      'Créer une nouvelle commande dans le système'
+                    )}
                   </p>
                 </div>
               </div>
@@ -1175,6 +1191,11 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                         </div>
                         <h4 className="text-lg font-semibold text-gray-800">
                           Sélection et configuration des produits
+                          {selectedOrderProduct && (
+                            <span className="text-blue-600 text-sm ml-2 font-normal">
+                              (Édition du produit sélectionné uniquement)
+                            </span>
+                          )}
                           {user?.role === 'atelier' && (
                             <span className="text-orange-600 text-sm ml-2 font-normal">
                               (Mode lecture seule - Finitions uniquement modifiables)
@@ -1183,7 +1204,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                         </h4>
                         <div className="flex-1 h-px bg-gradient-to-r from-green-200 to-transparent"></div>
                       </div>
-                      {user?.role !== 'atelier' && (
+                      {user?.role !== 'atelier' && !selectedOrderProduct && (
                         <button
                           type="button"
                           onClick={addProduct}
@@ -1205,21 +1226,33 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                       <div className="space-y-4">
                         {selectedProducts.length === 0 ? (
                           <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                            <div className="text-gray-500 mb-2">Aucun produit sélectionné</div>
-                            <button
-                              type="button"
-                              onClick={addProduct}
-                              className="text-green-600 hover:text-green-700 font-medium"
-                            >
-                              Cliquez ici pour ajouter votre premier produit
-                            </button>
+                            <div className="text-gray-500 mb-2">
+                              {selectedOrderProduct 
+                                ? "Erreur: Le produit sélectionné n'a pas pu être chargé"
+                                : "Aucun produit sélectionné"
+                              }
+                            </div>
+                            {!selectedOrderProduct && (
+                              <button
+                                type="button"
+                                onClick={addProduct}
+                                className="text-green-600 hover:text-green-700 font-medium"
+                              >
+                                Cliquez ici pour ajouter votre premier produit
+                              </button>
+                            )}
                           </div>
                         ) : (
                           selectedProducts.map((product, index) => (
                             <div key={index} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
                               <div className="flex items-center justify-between mb-4">
-                                <h5 className="font-medium text-gray-800">Produit {index + 1}</h5>
-                                {user?.role !== 'atelier' && (
+                                <h5 className="font-medium text-gray-800">
+                                  {selectedOrderProduct 
+                                    ? `Produit sélectionné: ${selectedOrderProduct.productInfo?.name || selectedOrderProduct.product?.name || 'Produit sans nom'}`
+                                    : `Produit ${index + 1}`
+                                  }
+                                </h5>
+                                {user?.role !== 'atelier' && !selectedOrderProduct && (
                                   <button
                                     type="button"
                                     onClick={() => removeProduct(index)}
@@ -1231,9 +1264,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                     </svg>
                                   </button>
                                 )}
-                              </div>
-                              
-                              {/* Atelier concerné field - moved to top and made required */}
+                              </div>                              {/* Atelier concerné field - moved to top and made required */}
                               {visibleFields.productLevel.atelier_concerne && user?.role !== 'atelier' && (
                                 <div className="mb-6">
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
