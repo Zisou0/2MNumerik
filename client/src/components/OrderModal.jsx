@@ -307,6 +307,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
           }
 
           return {
+            orderProductId: orderProduct.id, // Preserve unique OrderProduct ID for existing products
             productId: orderProduct.product_id,
             quantity: orderProduct.quantity || 1,
             unitPrice: orderProduct.unit_price || null,
@@ -952,7 +953,37 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       }
       
       if (order) {
-        await orderAPI.updateOrder(order.id, submitData)
+        // Only support editing specific product orders, not entire orders
+        if (selectedOrderProduct && selectedProducts.length === 1) {
+          const product = selectedProducts[0];
+          await orderAPI.updateOrderProduct(order.id, selectedOrderProduct.id, {
+            productId: product.productId,
+            quantity: product.quantity,
+            unitPrice: product.unitPrice || null,
+            numero_pms: product.numero_pms || null,
+            infograph_en_charge: product.infograph_en_charge || null,
+            agent_impression: product.agent_impression || null,
+            machine_impression: product.machine_impression || null,
+            etape: product.etape || null,
+            atelier_concerne: product.atelier_concerne || null,
+            estimated_work_time_minutes: product.estimated_work_time_minutes ? parseInt(product.estimated_work_time_minutes) : null,
+            date_limite_livraison_estimee: product.date_limite_livraison_estimee ? 
+              toISOString(product.date_limite_livraison_estimee) : null,
+            bat: product.bat || null,
+            express: product.express || null,
+            pack_fin_annee: product.pack_fin_annee || null,
+            commentaires: product.commentaires || null,
+            type_sous_traitance: product.type_sous_traitance || null,
+            supplier_id: product.supplier_id || null,
+            finitions: product.finitions?.map(finition => ({
+              ...finition,
+              start_date: finition.start_date ? toISOString(finition.start_date) : null,
+              end_date: finition.end_date ? toISOString(finition.end_date) : null
+            })) || []
+          });
+        } else {
+          throw new Error('Cette modal ne peut éditer que des produits individuels');
+        }
       } else {
         await orderAPI.createOrder(submitData)
       }

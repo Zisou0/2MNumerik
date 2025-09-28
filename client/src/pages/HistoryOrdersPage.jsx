@@ -116,6 +116,7 @@ const HistoryOrdersPage = () => {
   // Changed from orders to orderProductRows to match dashboard structure
   const [orderProductRows, setOrderProductRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [paginationLoading, setPaginationLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [selectedOrderProduct, setSelectedOrderProduct] = useState(null)
@@ -433,13 +434,18 @@ const HistoryOrdersPage = () => {
   // Fetch orders and flatten to order-product rows (history version)
   const fetchHistoryOrders = async (page = 1) => {
     try {
-      setLoading(true)
+      // Show pagination loading for page changes, full loading for first load
+      if (orderProductRows.length > 0) {
+        setPaginationLoading(true)
+      } else {
+        setLoading(true)
+      }
       
       // Use the new history API endpoint
       const historyFilters = {
         ...filters,
         page,
-        limit: 10
+        limit: 30  // Changed from 10 to 30 as requested
       }
 
       // Convert array filters to comma-separated strings for backend compatibility
@@ -523,16 +529,23 @@ const HistoryOrdersPage = () => {
       })
       
       setOrderProductRows(flatRows)
-      setPagination(response.pagination || {
-        currentPage: 1,
-        totalPages: 1,
-        totalOrders: 0
-      })
+      
+      // Only update pagination metadata if it's provided (not the currentPage)
+      if (response.pagination) {
+        setPagination(prev => ({
+          currentPage: prev.currentPage, // Keep the current page as is
+          totalPages: response.pagination.totalPages || Math.max(1, Math.ceil((response.totalCount || 0) / 30)),
+          totalOrders: response.pagination.totalCount || response.totalCount || 0,
+          hasNextPage: response.pagination.hasNextPage || false,
+          hasPrevPage: response.pagination.hasPrevPage || false
+        }))
+      }
     } catch (err) {
       setError('Erreur lors du chargement de l\'historique des commandes')
       console.error(err)
     } finally {
       setLoading(false)
+      setPaginationLoading(false)
     }
   }
 
@@ -566,9 +579,18 @@ const HistoryOrdersPage = () => {
   }
 
   useEffect(() => {
-    fetchHistoryOrders()
+    // Reset to page 1 and fetch when filters change
+    fetchHistoryOrders(1)
     fetchHistoryStats()
+    // Reset pagination state after fetch to avoid triggering pagination effect
+    setPagination(prev => ({ ...prev, currentPage: 1 }))
   }, [filters])
+
+  // Handle user-initiated pagination changes
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, currentPage: newPage }))
+    fetchHistoryOrders(newPage)
+  }
 
   // Fetch users once on component mount
   useEffect(() => {
@@ -998,7 +1020,15 @@ const HistoryOrdersPage = () => {
 
         {/* Main Table */}
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <div className="overflow-x-auto">
+          {paginationLoading && (
+            <div className="absolute inset-0 bg-white bg-opacity-75 z-10 flex items-center justify-center">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                <span className="text-sm text-gray-600">Chargement...</span>
+              </div>
+            </div>
+          )}
+          <div className={`overflow-x-auto ${paginationLoading ? 'relative' : ''}`}>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -1262,15 +1292,15 @@ const HistoryOrdersPage = () => {
             <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200">
               <div className="flex-1 flex justify-between sm:hidden">
                 <button
-                  onClick={() => fetchHistoryOrders(pagination.currentPage - 1)}
-                  disabled={!pagination.hasPrevPage}
+                  onClick={() => handlePageChange(Math.max(1, pagination.currentPage - 1))}
+                  disabled={pagination.currentPage === 1}
                   className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   Précédent
                 </button>
                 <button
-                  onClick={() => fetchHistoryOrders(pagination.currentPage + 1)}
-                  disabled={!pagination.hasNextPage}
+                  onClick={() => handlePageChange(Math.min(pagination.totalPages, pagination.currentPage + 1))}
+                  disabled={pagination.currentPage >= pagination.totalPages}
                   className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   Suivant
@@ -1279,26 +1309,129 @@ const HistoryOrdersPage = () => {
               <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm text-gray-700">
-                    Page <span className="font-medium">{pagination.currentPage}</span> sur{' '}
-                    <span className="font-medium">{pagination.totalPages}</span> - Total:{' '}
+                    Affichage de <span className="font-medium">{((pagination.currentPage - 1) * 30) + 1}</span> à{' '}
+                    <span className="font-medium">{Math.min(pagination.currentPage * 30, pagination.totalOrders)}</span> sur{' '}
                     <span className="font-medium">{pagination.totalOrders}</span> éléments
+                    {pagination.totalPages > 1 && (
+                      <span> (page {pagination.currentPage} sur {pagination.totalPages})</span>
+                    )}
                   </p>
                 </div>
                 <div>
                   <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    {[...Array(pagination.totalPages)].map((_, i) => (
+                    {/* First page button */}
+                    {pagination.currentPage > 1 && (
                       <button
-                        key={i + 1}
-                        onClick={() => fetchHistoryOrders(i + 1)}
-                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                          pagination.currentPage === i + 1
-                            ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
-                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                        }`}
+                        onClick={() => handlePageChange(1)}
+                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
                       >
-                        {i + 1}
+                        «
                       </button>
-                    ))}
+                    )}
+                    
+                    {/* Previous page button */}
+                    <button
+                      onClick={() => handlePageChange(Math.max(1, pagination.currentPage - 1))}
+                      disabled={pagination.currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      ‹
+                    </button>
+
+                    {/* Page numbers - show only a range around current page for large datasets */}
+                    {(() => {
+                      const maxPagesToShow = 7
+                      const totalPages = pagination.totalPages
+                      const currentPage = pagination.currentPage
+                      
+                      let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2))
+                      let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1)
+                      
+                      // Adjust startPage if we're near the end
+                      if (endPage - startPage < maxPagesToShow - 1) {
+                        startPage = Math.max(1, endPage - maxPagesToShow + 1)
+                      }
+                      
+                      const pages = []
+                      
+                      // Show first page if not in range
+                      if (startPage > 1) {
+                        pages.push(
+                          <button
+                            key={1}
+                            onClick={() => handlePageChange(1)}
+                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                          >
+                            1
+                          </button>
+                        )
+                        if (startPage > 2) {
+                          pages.push(
+                            <span key="ellipsis1" className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500">
+                              ...
+                            </span>
+                          )
+                        }
+                      }
+                      
+                      // Show page range
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => handlePageChange(i)}
+                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                              currentPage === i
+                                ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            {i}
+                          </button>
+                        )
+                      }
+                      
+                      // Show last page if not in range
+                      if (endPage < totalPages) {
+                        if (endPage < totalPages - 1) {
+                          pages.push(
+                            <span key="ellipsis2" className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500">
+                              ...
+                            </span>
+                          )
+                        }
+                        pages.push(
+                          <button
+                            key={totalPages}
+                            onClick={() => handlePageChange(totalPages)}
+                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                          >
+                            {totalPages}
+                          </button>
+                        )
+                      }
+                      
+                      return pages
+                    })()}
+
+                    {/* Next page button */}
+                    <button
+                      onClick={() => handlePageChange(Math.min(pagination.totalPages, pagination.currentPage + 1))}
+                      disabled={pagination.currentPage >= pagination.totalPages}
+                      className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      ›
+                    </button>
+
+                    {/* Last page button */}
+                    {pagination.currentPage < pagination.totalPages && (
+                      <button
+                        onClick={() => handlePageChange(pagination.totalPages)}
+                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      >
+                        »
+                      </button>
+                    )}
                   </nav>
                 </div>
               </div>

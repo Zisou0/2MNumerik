@@ -673,6 +673,7 @@ class OrderController {
           completeOrder.orderProducts.forEach(orderProduct => {
             io.to('role-infograph').emit('orderEtapeChanged', {
               orderId: completeOrder.id,
+              orderProductId: orderProduct.id,
               productId: orderProduct.product_id,
               orderNumber: orderProduct.numero_pms || `Commande #${completeOrder.id}`,
               productName: orderProduct.product?.name || 'Produit non spécifié',
@@ -695,6 +696,7 @@ class OrderController {
           productsWithImpression.forEach(orderProduct => {
             io.to('role-atelier').emit('orderEtapeChanged', {
               orderId: completeOrder.id,
+              orderProductId: orderProduct.id,
               productId: orderProduct.product_id,
               orderNumber: orderProduct.numero_pms || `Commande #${completeOrder.id}`,
               productName: orderProduct.product?.name || 'Produit non spécifié',
@@ -838,46 +840,68 @@ class OrderController {
           });
         }
 
-        // Remove existing order-product relationships and their finitions
-        await OrderProduct.destroy({
+        // Handle products update intelligently
+        // Separate existing products (with orderProductId) from new products
+        const existingOrderProducts = products.filter(p => p.orderProductId);
+        const newProducts = products.filter(p => !p.orderProductId);
+        
+        // Get current OrderProduct IDs for this order
+        const currentOrderProducts = await OrderProduct.findAll({
           where: { order_id: id },
+          attributes: ['id'],
           transaction
         });
+        const currentOrderProductIds = currentOrderProducts.map(op => op.id);
+        
+        // Find OrderProducts to delete (not in the existing products list)
+        const orderProductIdsToKeep = existingOrderProducts.map(p => p.orderProductId);
+        const orderProductIdsToDelete = currentOrderProductIds.filter(
+          id => !orderProductIdsToKeep.includes(id)
+        );
+        
+        // Delete OrderProducts that are no longer needed
+        if (orderProductIdsToDelete.length > 0) {
+          await OrderProduct.destroy({
+            where: { id: orderProductIdsToDelete },
+            transaction
+          });
+        }
 
-        // Create new order-product relationships
-        const orderProducts = products.map(product => ({
-          order_id: id,
-          product_id: product.productId,
-          quantity: product.quantity,
-          unit_price: product.unitPrice || null,
-          // Product-specific fields
-          numero_pms: product.numero_pms || null,
-          infograph_en_charge: product.infograph_en_charge || null,
-          agent_impression: product.agent_impression || null,
-          machine_impression: product.machine_impression || null,
-          etape: product.etape || null,
-          statut: product.statut || 'en_cours',
-          estimated_work_time_minutes: product.estimated_work_time_minutes || null,
-          date_limite_livraison_estimee: product.date_limite_livraison_estimee ? new Date(product.date_limite_livraison_estimee) : null,
-          atelier_concerne: product.atelier_concerne || null,
-          commentaires: product.commentaires || null,
-          bat: product.bat || null,
-          express: product.express || null,
-          pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
-          type_sous_traitance: product.type_sous_traitance || null,
-          supplier_id: product.supplier_id || null
-        }));
+        // Update existing OrderProducts
+        for (const product of existingOrderProducts) {
+          await OrderProduct.update({
+            product_id: product.productId,
+            quantity: product.quantity,
+            unit_price: product.unitPrice || null,
+            numero_pms: product.numero_pms || null,
+            infograph_en_charge: product.infograph_en_charge || null,
+            agent_impression: product.agent_impression || null,
+            machine_impression: product.machine_impression || null,
+            etape: product.etape || null,
+            statut: product.statut || 'en_cours',
+            estimated_work_time_minutes: product.estimated_work_time_minutes || null,
+            date_limite_livraison_estimee: product.date_limite_livraison_estimee ? new Date(product.date_limite_livraison_estimee) : null,
+            atelier_concerne: product.atelier_concerne || null,
+            commentaires: product.commentaires || null,
+            bat: product.bat || null,
+            express: product.express || null,
+            pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
+            type_sous_traitance: product.type_sous_traitance || null,
+            supplier_id: product.supplier_id || null
+          }, {
+            where: { id: product.orderProductId },
+            transaction
+          });
 
-        const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
+          // Update finitions for existing product
+          await OrderProductFinition.destroy({
+            where: { order_product_id: product.orderProductId },
+            transaction
+          });
 
-        // Create finitions for each order product
-        for (let i = 0; i < products.length; i++) {
-          const product = products[i];
-          const orderProduct = createdOrderProducts[i];
-          
           if (product.finitions && Array.isArray(product.finitions)) {
             const finitionsToCreate = product.finitions.map(finition => ({
-              order_product_id: orderProduct.id,
+              order_product_id: product.orderProductId,
               finition_id: finition.finition_id,
               assigned_agents: finition.assigned_agents || null,
               start_date: finition.start_date ? new Date(finition.start_date) : null,
@@ -885,6 +909,52 @@ class OrderController {
             }));
             
             await OrderProductFinition.bulkCreate(finitionsToCreate, { transaction });
+          }
+        }
+
+        // Create new order-product relationships (only for products without orderProductId)
+        if (newProducts.length > 0) {
+          const orderProducts = newProducts.map(product => ({
+            order_id: id,
+            product_id: product.productId,
+            quantity: product.quantity,
+            unit_price: product.unitPrice || null,
+            // Product-specific fields
+            numero_pms: product.numero_pms || null,
+            infograph_en_charge: product.infograph_en_charge || null,
+            agent_impression: product.agent_impression || null,
+            machine_impression: product.machine_impression || null,
+            etape: product.etape || null,
+            statut: product.statut || 'en_cours',
+            estimated_work_time_minutes: product.estimated_work_time_minutes || null,
+            date_limite_livraison_estimee: product.date_limite_livraison_estimee ? new Date(product.date_limite_livraison_estimee) : null,
+            atelier_concerne: product.atelier_concerne || null,
+            commentaires: product.commentaires || null,
+            bat: product.bat || null,
+            express: product.express || null,
+            pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
+            type_sous_traitance: product.type_sous_traitance || null,
+            supplier_id: product.supplier_id || null
+          }));
+
+          const createdOrderProducts = await OrderProduct.bulkCreate(orderProducts, { transaction, returning: true });
+
+          // Create finitions for each new order product
+          for (let i = 0; i < newProducts.length; i++) {
+            const product = newProducts[i];
+            const orderProduct = createdOrderProducts[i];
+            
+            if (product.finitions && Array.isArray(product.finitions)) {
+              const finitionsToCreate = product.finitions.map(finition => ({
+                order_product_id: orderProduct.id,
+                finition_id: finition.finition_id,
+                assigned_agents: finition.assigned_agents || null,
+                start_date: finition.start_date ? new Date(finition.start_date) : null,
+                end_date: finition.end_date ? new Date(finition.end_date) : null
+              }));
+              
+              await OrderProductFinition.bulkCreate(finitionsToCreate, { transaction });
+            }
           }
         }
       }
@@ -1138,8 +1208,14 @@ class OrderController {
         bat,
         pack_fin_annee,
         type_sous_traitance,
-        search
+        search,
+        page = 1,
+        limit = 30
       } = req.query;
+
+      // Parse pagination parameters
+      const pageNumber = parseInt(page) || 1;
+      const limitNumber = parseInt(limit) || 30;
 
       // Build where clause for order-level filtering
       const whereClause = {};
@@ -1219,65 +1295,80 @@ class OrderController {
         ];
       }
 
-      // Query to find orders that have history products, ordered by most recent update
-      const orders = await Order.findAll({
-        where: whereClause,
+      // First, get the total count for pagination metadata
+      const totalCount = await OrderProduct.count({
+        where: productWhere,
         include: [
           {
-            model: OrderProduct,
-            as: 'orderProducts',
-            where: productWhere,
-            required: true, // Only orders that have history products
+            model: Order,
+            as: 'order',
+            where: whereClause,
+            required: true,
             include: [
               {
-                model: Product,
-                as: 'product',
-                attributes: ['id', 'name', 'estimated_creation_time']
-              },
+                model: Client,
+                as: 'clientInfo',
+                attributes: []
+              }
+            ]
+          }
+        ],
+        distinct: true
+      });
+
+      // Calculate pagination
+      const totalPages = Math.ceil(totalCount / limitNumber);
+      const offset = (pageNumber - 1) * limitNumber;
+
+      // Query for the paginated order products directly
+      const orderProducts = await OrderProduct.findAll({
+        where: productWhere,
+        include: [
+          {
+            model: Order,
+            as: 'order',
+            where: whereClause,
+            required: true,
+            include: [
               {
-                model: OrderProductFinition,
-                as: 'orderProductFinitions',
-                include: [
-                  {
-                    model: Finition,
-                    as: 'finition',
-                    attributes: ['id', 'name', 'description']
-                  }
-                ]
+                model: Client,
+                as: 'clientInfo',
+                attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client']
               }
             ]
           },
           {
-            model: Client,
-            as: 'clientInfo',
-            attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client']
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'name', 'estimated_creation_time']
+          },
+          {
+            model: OrderProductFinition,
+            as: 'orderProductFinitions',
+            include: [
+              {
+                model: Finition,
+                as: 'finition',
+                attributes: ['id', 'name', 'description']
+              }
+            ]
           }
         ],
-        order: [['updatedAt', 'DESC']],
+        limit: limitNumber,
+        offset: offset,
+        order: [
+          ['updatedAt', 'DESC'], // OrderProduct's updatedAt for recency
+          ['id', 'ASC'] // Secondary sort for consistent ordering
+        ],
         distinct: true
       });
-
-      // Flatten to order-product rows and apply pagination at the product level
-      const allProductRows = [];
-      orders.forEach(order => {
-        if (order.orderProducts && order.orderProducts.length > 0) {
-          order.orderProducts.forEach(orderProduct => {
-            allProductRows.push({
-              order,
-              orderProduct
-            });
-          });
-        }
-      });
-
-      // Sort by most recent update
-      allProductRows.sort((a, b) => new Date(b.order.updatedAt) - new Date(a.order.updatedAt));
 
       // Format the response to match the expected structure
       const formattedOrders = [];
       const orderMap = new Map();
 
-      allProductRows.forEach(({ order, orderProduct }) => {
+      orderProducts.forEach(orderProduct => {
+        const order = orderProduct.order;
         if (!orderMap.has(order.id)) {
           orderMap.set(order.id, {
             ...order.toJSON(),
@@ -1285,12 +1376,26 @@ class OrderController {
           });
           formattedOrders.push(orderMap.get(order.id));
         }
-        orderMap.get(order.id).orderProducts.push(orderProduct);
+        // Remove the nested order data from orderProduct to avoid duplication
+        const cleanOrderProduct = { ...orderProduct.toJSON() };
+        delete cleanOrderProduct.order;
+        orderMap.get(order.id).orderProducts.push(cleanOrderProduct);
       });
+
+      // Create pagination metadata
+      const pagination = {
+        currentPage: pageNumber,
+        totalPages: totalPages,
+        totalCount: totalCount,
+        hasNextPage: pageNumber < totalPages,
+        hasPrevPage: pageNumber > 1,
+        limit: limitNumber
+      };
 
       res.json({
         message: 'Historique des commandes récupéré avec succès',
-        orders: formattedOrders
+        orders: formattedOrders,
+        pagination: pagination
       });
     } catch (error) {
       console.error('Get history orders error:', error);
@@ -1520,6 +1625,7 @@ class OrderController {
           // Send specific notification to infograph users about new order product available
           io.to('role-infograph').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
+            orderProductId: parseInt(updatedOrderProduct.id),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
@@ -1546,6 +1652,7 @@ class OrderController {
           // Send specific notification to infograph users about new order product in pre-press
           io.to('role-infograph').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
+            orderProductId: parseInt(updatedOrderProduct.id),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
@@ -1575,6 +1682,7 @@ class OrderController {
           // Send specific notification to atelier users about new order product ready for printing
           io.to('role-atelier').emit('orderEtapeChanged', {
             orderId: parseInt(orderId),
+            orderProductId: parseInt(updatedOrderProduct.id),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',
@@ -1604,6 +1712,7 @@ class OrderController {
           // Send specific notification to commercial users about completed order product
           io.to('role-commercial').emit('orderStatusChanged', {
             orderId: parseInt(orderId),
+            orderProductId: parseInt(updatedOrderProduct.id),
             productId: parseInt(updatedOrderProduct.product_id),
             orderNumber: updatedOrderProduct.numero_pms || `Commande #${orderId}`,
             productName: updatedOrderProduct.product?.name || 'Produit non spécifié',

@@ -116,12 +116,12 @@ export const orderAPI = {
     body: JSON.stringify(orderData),
   }),
   
-  updateOrderProduct: (orderId, productId, productData) => apiCall(`/orders/${orderId}/products/${productId}`, {
+  updateOrderProduct: (orderId, orderProductId, productData) => apiCall(`/orders/${orderId}/products/${orderProductId}`, {
     method: 'PUT',
     body: JSON.stringify(productData),
   }),
   
-  deleteOrderProduct: (orderId, productId) => apiCall(`/orders/${orderId}/products/${productId}`, {
+  deleteOrderProduct: (orderId, orderProductId) => apiCall(`/orders/${orderId}/products/${orderProductId}`, {
     method: 'DELETE',
   }),
   
