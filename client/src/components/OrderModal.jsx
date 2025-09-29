@@ -48,6 +48,9 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     statut: 'en_cours'
   })
   
+  // Client surplace checkbox state
+  const [clientSurplace, setClientSurplace] = useState(false)
+  
   // Product selection and product-specific data
   const [selectedProducts, setSelectedProducts] = useState([])
   const [availableProducts, setAvailableProducts] = useState([])
@@ -259,16 +262,20 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
   useEffect(() => {
     if (order) {
       // Editing existing order
+      const hasDeliveryDate = order.date_limite_livraison_estimee
       setOrderFormData({
         numero_affaire: order.numero_affaire || '',
         numero_dm: order.numero_dm || '',
         client: order.client || '',
         client_id: order.client_id || null,
         commercial_en_charge: order.commercial_en_charge || '',
-        date_limite_livraison_estimee: order.date_limite_livraison_estimee ? 
+        date_limite_livraison_estimee: hasDeliveryDate ? 
           toLocalDateTimeString(order.date_limite_livraison_estimee) : '',
         statut: order.statut || 'en_cours'
       })
+      
+      // Set clientSurplace based on whether delivery date exists
+      setClientSurplace(!hasDeliveryDate)
       
       // Set selected client from order data
       if (order.clientInfo) {
@@ -404,6 +411,26 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     }
   }
 
+  const handleClientSurplaceChange = (checked) => {
+    setClientSurplace(checked)
+    if (checked) {
+      // Clear the date when client surplace is checked
+      setOrderFormData(prev => ({
+        ...prev,
+        date_limite_livraison_estimee: null
+      }))
+      
+      // Also clear dates from all existing products
+      setSelectedProducts(prevProducts => {
+        const updatedProducts = prevProducts.map(product => ({
+          ...product,
+          date_limite_livraison_estimee: null
+        }))
+        return updatedProducts
+      })
+    }
+  }
+
   // Helper function to map atelier options to product atelier_types
   const mapAtelierToType = (atelierOption) => {
     const mapping = {
@@ -444,7 +471,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       numero_pms: '',
       infograph_en_charge: '',
       agent_impression: '',
-      date_limite_livraison_estimee: orderFormData.date_limite_livraison_estimee || getTodayAt00(),
+      date_limite_livraison_estimee: clientSurplace ? null : (orderFormData.date_limite_livraison_estimee || getTodayAt00()),
       etape: 'pré-presse',
       atelier_concerne: '',
       estimated_work_time_minutes: '',
@@ -931,11 +958,15 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       }))
       
       const submitData = {
-        // Order-level data
-        ...orderFormData,
-        // Convert local datetime to ISO string for API
-        date_limite_livraison_estimee: orderFormData.date_limite_livraison_estimee ? 
-          toISOString(orderFormData.date_limite_livraison_estimee) : null,
+        // Order-level data (excluding date which we handle separately)
+        numero_affaire: orderFormData.numero_affaire,
+        numero_dm: orderFormData.numero_dm,
+        client: orderFormData.client,
+        statut: orderFormData.statut,
+        // Convert local datetime to ISO string for API, or null if client surplace
+        date_limite_livraison_estimee: clientSurplace ? null : 
+          (orderFormData.date_limite_livraison_estimee ? 
+            toISOString(orderFormData.date_limite_livraison_estimee) : null),
         commercial_en_charge: orderFormData.commercial_en_charge || user?.username || '',
         client_id: selectedClient?.id || null,
         // Product data
@@ -1148,16 +1179,53 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                           onClientSelect={handleClientSelect}
                           selectedClient={selectedClient}
                         />
+                        
+                        {/* Client Surplace Checkbox */}
+                        <div className="mt-3">
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={clientSurplace}
+                              onChange={(e) => handleClientSurplaceChange(e.target.checked)}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                            />
+                            <span className="text-sm font-medium text-gray-700">
+                              Client surplace?
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              (Cocher si le client récupère directement)
+                            </span>
+                          </label>
+                        </div>
                       </div>
                     )}
                     
                     {visibleFields.orderLevel.date_limite_livraison_estimee && !order && (
-                      <Input
-                        label="Date limite de livraison estimée"
-                        type="datetime-local"
-                        value={orderFormData.date_limite_livraison_estimee || getTodayAt00()}
-                        onChange={(e) => handleOrderFormChange('date_limite_livraison_estimee', e.target.value)}
-                      />
+                      <div>
+                        <label className={`block text-sm font-medium mb-2 ${clientSurplace ? 'text-gray-400' : 'text-gray-700'}`}>
+                          Date limite de livraison estimée
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={clientSurplace ? '' : (orderFormData.date_limite_livraison_estimee || getTodayAt00())}
+                          onChange={(e) => {
+                            if (!clientSurplace) {
+                              handleOrderFormChange('date_limite_livraison_estimee', e.target.value)
+                            }
+                          }}
+                          disabled={clientSurplace}
+                          className={`w-full px-3 py-2 border rounded-lg focus:outline-none transition-all duration-200 ${
+                            clientSurplace 
+                              ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-60' 
+                              : 'bg-white border-gray-300 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                          }`}
+                        />
+                        {clientSurplace && (
+                          <p className="mt-1 text-sm text-orange-600">
+                            Date désactivée - Client surplace sélectionné
+                          </p>
+                        )}
+                      </div>
                     )}
                     
                     {visibleFields.orderLevel.statut && (
