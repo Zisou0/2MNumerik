@@ -1487,7 +1487,9 @@ class OrderController {
         express,
         pack_fin_annee,
         commentaires,
-        type_sous_traitance
+        type_sous_traitance,
+        supplier_id,
+        finitions
       } = req.body;
 
       // Find the order product by its unique ID
@@ -1550,6 +1552,18 @@ class OrderController {
       
       // Removed infograph assignment restrictions - any infograph can edit any product
 
+      // Validate finitions if provided
+      if (finitions && Array.isArray(finitions)) {
+        for (const finition of finitions) {
+          if (!finition.finition_id || typeof finition.finition_id !== 'number') {
+            await transaction.rollback();
+            return res.status(400).json({ 
+              message: 'Chaque finition doit avoir un ID valide' 
+            });
+          }
+        }
+      }
+
       // Update the order product
       await orderProduct.update({
         quantity,
@@ -1566,8 +1580,31 @@ class OrderController {
         express,
         pack_fin_annee: pack_fin_annee === 'true' || pack_fin_annee === true,
         commentaires,
-        type_sous_traitance
+        type_sous_traitance,
+        supplier_id
       }, { transaction });
+
+      // Update finitions if provided
+      if (finitions && Array.isArray(finitions)) {
+        // Remove existing finitions for this order product
+        await OrderProductFinition.destroy({
+          where: { order_product_id: orderProduct.id },
+          transaction
+        });
+
+        // Create new finitions
+        if (finitions.length > 0) {
+          const finitionsToCreate = finitions.map(finition => ({
+            order_product_id: orderProduct.id,
+            finition_id: finition.finition_id,
+            assigned_agents: finition.assigned_agents || null,
+            start_date: finition.start_date ? new Date(finition.start_date) : null,
+            end_date: finition.end_date ? new Date(finition.end_date) : null
+          }));
+          
+          await OrderProductFinition.bulkCreate(finitionsToCreate, { transaction });
+        }
+      }
 
       // Note: Removed automatic order status update to keep status at product level
       // Individual product statuses remain independent of overall order status
