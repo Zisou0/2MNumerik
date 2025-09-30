@@ -605,7 +605,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     finition_name: finition.name,
     additional_cost: finition.productFinition?.additional_cost || 0,
     additional_time: finition.productFinition?.additional_time || 0,
-    assigned_agents: [],
+    assigned_agents: [], // Initialize as empty array to trigger validation
     start_date: null,
     end_date: null
   }
@@ -924,6 +924,19 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         setError(`Produit ${i + 1}: Veuillez sélectionner un atelier concerné`)
         setLoading(false)
         return
+      }
+
+      // Validate finitions that require agents
+      if (visibleFields.productLevel.finitions && product.finitions && product.finitions.length > 0) {
+        for (let j = 0; j < product.finitions.length; j++) {
+          const finition = product.finitions[j]
+          // Check if the finition has assigned agents array but it's empty
+          if (finition.assigned_agents !== undefined && (!finition.assigned_agents || finition.assigned_agents.length === 0)) {
+            setError(`Produit ${i + 1}: Veuillez assigner au moins un agent à la finition "${finition.finition_name}"`)
+            setLoading(false)
+            return
+          }
+        }
       }
 
       if (visibleFields.productLevel.bat && !product.bat) {
@@ -2176,13 +2189,22 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                                 {/* Assigned Agents - Searchable Multi-Select */}
                                                 <div>
                                                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                                                    Agents assignés
+                                                    Agents assignés *
                                                   </label>
                                                   <AgentSelector
                                                     availableUsers={availableUsers.filter(user => user.role === 'atelier')}
                                                     selectedAgents={finition.assigned_agents || []}
                                                     onAgentsChange={(agents) => updateFinitionAssignedAgents(index, finition.finition_id, agents)}
                                                   />
+                                                  {/* Show inline error if no agents assigned */}
+                                                  {(!finition.assigned_agents || finition.assigned_agents.length === 0) && (
+                                                    <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+                                                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                      </svg>
+                                                      Veuillez assigner au moins un agent à cette finition
+                                                    </p>
+                                                  )}
                                                 </div>
                                                 
                                                 {/* Date Fields */}
