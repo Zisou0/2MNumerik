@@ -1283,40 +1283,26 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                 <div className="space-y-6">
                   {/* Product Selection Section */}
                   <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 shadow-sm hover:shadow-md transition-all duration-300">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-lg shadow-sm border border-green-200">
-                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                          </svg>
-                        </div>
-                        <h4 className="text-lg font-semibold text-gray-800">
-                          Sélection et configuration des produits
-                          {selectedOrderProduct && (
-                            <span className="text-blue-600 text-sm ml-2 font-normal">
-                              (Édition du produit sélectionné uniquement)
-                            </span>
-                          )}
-                          {user?.role === 'atelier' && (
-                            <span className="text-orange-600 text-sm ml-2 font-normal">
-                              (Mode lecture seule - Finitions uniquement modifiables)
-                            </span>
-                          )}
-                        </h4>
-                        <div className="flex-1 h-px bg-gradient-to-r from-green-200 to-transparent"></div>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-green-100 rounded-lg shadow-sm border border-green-200">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
                       </div>
-                      {user?.role !== 'atelier' && !selectedOrderProduct && (
-                        <button
-                          type="button"
-                          onClick={addProduct}
-                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm font-medium shadow-sm"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
-                          Ajouter produit
-                        </button>
-                      )}
+                      <h4 className="text-lg font-semibold text-gray-800">
+                        Sélection et configuration des produits
+                        {selectedOrderProduct && (
+                          <span className="text-blue-600 text-sm ml-2 font-normal">
+                            (Édition du produit sélectionné uniquement)
+                          </span>
+                        )}
+                        {user?.role === 'atelier' && (
+                          <span className="text-orange-600 text-sm ml-2 font-normal">
+                            (Mode lecture seule - Finitions uniquement modifiables)
+                          </span>
+                        )}
+                      </h4>
+                      <div className="flex-1 h-px bg-gradient-to-r from-green-200 to-transparent"></div>
                     </div>
 
                     {productsLoading ? (
@@ -2269,6 +2255,22 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                             </div>
                           ))
                         )}
+                      </div>
+                    )}
+                    
+                    {/* Add Product Button at Bottom */}
+                    {user?.role !== 'atelier' && !selectedOrderProduct && selectedProducts.length > 0 && (
+                      <div className="mt-6 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={addProduct}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm font-medium shadow-sm"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                          Ajouter produit
+                        </button>
                       </div>
                     )}
                   </div>
