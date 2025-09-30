@@ -1180,23 +1180,25 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                           selectedClient={selectedClient}
                         />
                         
-                        {/* Client Surplace Checkbox */}
-                        <div className="mt-3">
-                          <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={clientSurplace}
-                              onChange={(e) => handleClientSurplaceChange(e.target.checked)}
-                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                            />
-                            <span className="text-sm font-medium text-gray-700">
-                              Client surplace?
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              (Cocher si le client récupère directement)
-                            </span>
-                          </label>
-                        </div>
+                        {/* Client Surplace Checkbox - Only show when creating new orders */}
+                        {!order && (
+                          <div className="mt-3">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={clientSurplace}
+                                onChange={(e) => handleClientSurplaceChange(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                              />
+                              <span className="text-sm font-medium text-gray-700">
+                                Client surplace?
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                (Cocher si le client récupère directement)
+                              </span>
+                            </label>
+                          </div>
+                        )}
                       </div>
                     )}
                     
