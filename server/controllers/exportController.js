@@ -7,8 +7,27 @@ class ExportController {
   // Export dashboard table data to Excel
   static async exportDashboardTable(req, res) {
     try {
+      // Get date range parameters from query
+      const { dateFrom, dateTo } = req.query;
+      
+      // Build where clause for date filtering
+      let dateWhereClause = {};
+      if (dateFrom || dateTo) {
+        dateWhereClause.createdAt = {};
+        if (dateFrom) {
+          dateWhereClause.createdAt[Op.gte] = new Date(dateFrom);
+        }
+        if (dateTo) {
+          // Set to end of day for dateTo
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          dateWhereClause.createdAt[Op.lte] = endDate;
+        }
+      }
+
       // Fetch orders with order products that have "livré" status
       const orders = await Order.findAll({
+        where: dateWhereClause,
         include: [
           {
             model: OrderProduct,
@@ -150,6 +169,27 @@ class ExportController {
   // Export tasks table data to Excel
   static async exportTasksTable(req, res) {
     try {
+      // Get date range parameters from query
+      const { dateFrom, dateTo } = req.query;
+      
+      // Build where clause for date filtering
+      let dateWhereClause = {
+        status: 'completed'
+      };
+      
+      if (dateFrom || dateTo) {
+        dateWhereClause.createdAt = {};
+        if (dateFrom) {
+          dateWhereClause.createdAt[Op.gte] = new Date(dateFrom);
+        }
+        if (dateTo) {
+          // Set to end of day for dateTo
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          dateWhereClause.createdAt[Op.lte] = endDate;
+        }
+      }
+
       // First, get all users to create a lookup map
       const users = await User.findAll({
         attributes: ['id', 'username'],
@@ -163,11 +203,9 @@ class ExportController {
       });
 
       // Fetch all tasks with related data (order relationship was removed in migration)
-      // Only export tasks with status "completed"
+      // Export tasks based on date filter
       const tasks = await AtelierTask.findAll({
-        where: {
-          status: 'completed'
-        },
+        where: dateWhereClause,
         include: [
           {
             model: User,
@@ -338,11 +376,29 @@ class ExportController {
         return ExportController.exportDatabaseSQL(req, res);
       }
 
+      // Get date range parameters from query
+      const { dateFrom, dateTo } = req.query;
+      
+      // Build where clause for date filtering
+      let dateWhereClause = {};
+      if (dateFrom || dateTo) {
+        dateWhereClause.createdAt = {};
+        if (dateFrom) {
+          dateWhereClause.createdAt[Op.gte] = new Date(dateFrom);
+        }
+        if (dateTo) {
+          // Set to end of day for dateTo
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          dateWhereClause.createdAt[Op.lte] = endDate;
+        }
+      }
+
       // Excel export (existing logic)
       // Create a new workbook
       const workbook = XLSX.utils.book_new();
 
-      // Export Users table
+      // Export Users table (no date filtering for users)
       const users = await User.findAll({
         attributes: { exclude: ['password'] }, // Don't export passwords
         raw: true
@@ -353,57 +409,88 @@ class ExportController {
         XLSX.utils.book_append_sheet(workbook, usersWorksheet, 'Users');
       }
 
-      // Export Clients table
-      const clients = await Client.findAll({ raw: true });
+      // Export Clients table with date filtering
+      const clients = await Client.findAll({ 
+        where: dateWhereClause,
+        raw: true 
+      });
       if (clients.length > 0) {
         const clientsWorksheet = XLSX.utils.json_to_sheet(clients);
         XLSX.utils.book_append_sheet(workbook, clientsWorksheet, 'Clients');
       }
 
-      // Export Products table
-      const products = await Product.findAll({ raw: true });
+      // Export Products table with date filtering
+      const products = await Product.findAll({ 
+        where: dateWhereClause,
+        raw: true 
+      });
       if (products.length > 0) {
         const productsWorksheet = XLSX.utils.json_to_sheet(products);
         XLSX.utils.book_append_sheet(workbook, productsWorksheet, 'Products');
       }
 
-      // Export Orders table
-      const orders = await Order.findAll({ raw: true });
+      // Export Orders table with date filtering
+      const orders = await Order.findAll({ 
+        where: dateWhereClause,
+        raw: true 
+      });
       if (orders.length > 0) {
         const ordersWorksheet = XLSX.utils.json_to_sheet(orders);
         XLSX.utils.book_append_sheet(workbook, ordersWorksheet, 'Orders');
       }
 
-      // Export OrderProducts table (junction table)
-      const orderProducts = await OrderProduct.findAll({ raw: true });
+      // Export OrderProducts table (junction table) with date filtering
+      const orderProducts = await OrderProduct.findAll({ 
+        where: dateWhereClause,
+        raw: true 
+      });
       if (orderProducts.length > 0) {
         const orderProductsWorksheet = XLSX.utils.json_to_sheet(orderProducts);
         XLSX.utils.book_append_sheet(workbook, orderProductsWorksheet, 'OrderProducts');
       }
 
-      // Export Finitions table
+      // Export Finitions table (no date filtering for finitions master data)
       const finitions = await Finition.findAll({ raw: true });
       if (finitions.length > 0) {
         const finitionsWorksheet = XLSX.utils.json_to_sheet(finitions);
         XLSX.utils.book_append_sheet(workbook, finitionsWorksheet, 'Finitions');
       }
 
-      // Export ProductFinitions table (junction table)
+      // Export ProductFinitions table (junction table) (no date filtering)
       const productFinitions = await ProductFinition.findAll({ raw: true });
       if (productFinitions.length > 0) {
         const productFinitionsWorksheet = XLSX.utils.json_to_sheet(productFinitions);
         XLSX.utils.book_append_sheet(workbook, productFinitionsWorksheet, 'ProductFinitions');
       }
 
-      // Export OrderProductFinitions table (junction table)
-      const orderProductFinitions = await OrderProductFinition.findAll({ raw: true });
+      // Export OrderProductFinitions table (junction table) with date filtering on created_at
+      let opfWhereClause = {};
+      if (dateFrom || dateTo) {
+        opfWhereClause.created_at = {};
+        if (dateFrom) {
+          opfWhereClause.created_at[Op.gte] = new Date(dateFrom);
+        }
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          opfWhereClause.created_at[Op.lte] = endDate;
+        }
+      }
+
+      const orderProductFinitions = await OrderProductFinition.findAll({ 
+        where: opfWhereClause,
+        raw: true 
+      });
       if (orderProductFinitions.length > 0) {
         const orderProductFinitionsWorksheet = XLSX.utils.json_to_sheet(orderProductFinitions);
         XLSX.utils.book_append_sheet(workbook, orderProductFinitionsWorksheet, 'OrderProductFinitions');
       }
 
-      // Export AtelierTasks table
-      const atelierTasks = await AtelierTask.findAll({ raw: true });
+      // Export AtelierTasks table with date filtering
+      const atelierTasks = await AtelierTask.findAll({ 
+        where: dateWhereClause,
+        raw: true 
+      });
       if (atelierTasks.length > 0) {
         const atelierTasksWorksheet = XLSX.utils.json_to_sheet(atelierTasks);
         XLSX.utils.book_append_sheet(workbook, atelierTasksWorksheet, 'AtelierTasks');
@@ -434,6 +521,24 @@ class ExportController {
   // Export finitions table data to Excel
   static async exportFinitionsTable(req, res) {
     try {
+      // Get date range parameters from query
+      const { dateFrom, dateTo } = req.query;
+      
+      // Build where clause for date filtering
+      let dateWhereClause = {};
+      if (dateFrom || dateTo) {
+        dateWhereClause.created_at = {};
+        if (dateFrom) {
+          dateWhereClause.created_at[Op.gte] = new Date(dateFrom);
+        }
+        if (dateTo) {
+          // Set to end of day for dateTo
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          dateWhereClause.created_at[Op.lte] = endDate;
+        }
+      }
+
       // First, get all users to create a lookup map
       const users = await User.findAll({
         attributes: ['id', 'username'],
@@ -448,6 +553,7 @@ class ExportController {
 
       // Fetch all finitions with related order product finitions
       const orderProductFinitions = await OrderProductFinition.findAll({
+        where: dateWhereClause,
         include: [
           {
             model: Finition,

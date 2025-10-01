@@ -267,8 +267,24 @@ export const statisticsAPI = {
 
 // Export API calls
 export const exportAPI = {
-  exportDatabase: async (format = 'excel') => {
-    const url = `${API_BASE_URL}/export/database?format=${format}`
+  exportDatabase: async (params = {}) => {
+    const queryParams = new URLSearchParams()
+    
+    // Add format parameter (default to excel)
+    if (params.format) {
+      queryParams.append('format', params.format)
+    } else if (typeof params === 'string') {
+      // Handle backward compatibility where format was passed as string
+      queryParams.append('format', params)
+    } else {
+      queryParams.append('format', 'excel')
+    }
+    
+    // Add date parameters if provided
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom)
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo)
+    
+    const url = `${API_BASE_URL}/export/database?${queryParams}`
     
     const response = await fetch(url, {
       credentials: 'include',
@@ -286,8 +302,15 @@ export const exportAPI = {
     return response.blob()
   },
 
-  exportDashboardTable: async () => {
-    const url = `${API_BASE_URL}/export/dashboard`
+  exportDashboardTable: async (params = {}) => {
+    const queryParams = new URLSearchParams()
+    
+    // Add date parameters if provided
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom)
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo)
+    
+    const queryString = queryParams.toString()
+    const url = `${API_BASE_URL}/export/dashboard${queryString ? '?' + queryString : ''}`
     
     const response = await fetch(url, {
       credentials: 'include',
@@ -305,8 +328,15 @@ export const exportAPI = {
     return response.blob()
   },
 
-  exportTasksTable: async () => {
-    const url = `${API_BASE_URL}/export/tasks`
+  exportTasksTable: async (params = {}) => {
+    const queryParams = new URLSearchParams()
+    
+    // Add date parameters if provided
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom)
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo)
+    
+    const queryString = queryParams.toString()
+    const url = `${API_BASE_URL}/export/tasks${queryString ? '?' + queryString : ''}`
     
     const response = await fetch(url, {
       credentials: 'include',
@@ -324,8 +354,15 @@ export const exportAPI = {
     return response.blob()
   },
 
-  exportFinitionsTable: async () => {
-    const url = `${API_BASE_URL}/export/finitions`
+  exportFinitionsTable: async (params = {}) => {
+    const queryParams = new URLSearchParams()
+    
+    // Add date parameters if provided
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom)
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo)
+    
+    const queryString = queryParams.toString()
+    const url = `${API_BASE_URL}/export/finitions${queryString ? '?' + queryString : ''}`
     
     const response = await fetch(url, {
       credentials: 'include',

@@ -8,6 +8,17 @@ function SettingsPage() {
   const [isExportingTasks, setIsExportingTasks] = useState(false)
   const [isExportingFinitions, setIsExportingFinitions] = useState(false)
   const [isExportingSQL, setIsExportingSQL] = useState(false)
+  
+  // Date ranges for each export type
+  const [dashboardDateFrom, setDashboardDateFrom] = useState('')
+  const [dashboardDateTo, setDashboardDateTo] = useState('')
+  const [tasksDateFrom, setTasksDateFrom] = useState('')
+  const [tasksDateTo, setTasksDateTo] = useState('')
+  const [finitionsDateFrom, setFinitionsDateFrom] = useState('')
+  const [finitionsDateTo, setFinitionsDateTo] = useState('')
+  const [databaseDateFrom, setDatabaseDateFrom] = useState('')
+  const [databaseDateTo, setDatabaseDateTo] = useState('')
+  
   const { addNotification } = useNotifications()
 
   const handleExportDatabase = async (format = 'excel') => {
@@ -15,17 +26,28 @@ function SettingsPage() {
     setLoadingState(true)
     
     try {
-      const blob = await exportAPI.exportDatabase(format)
+      // Prepare date parameters
+      const dateParams = { format }
+      if (databaseDateFrom) dateParams.dateFrom = databaseDateFrom
+      if (databaseDateTo) dateParams.dateTo = databaseDateTo
+      
+      const blob = await exportAPI.exportDatabase(dateParams)
       
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       
-      // Generate filename with current date
+      // Generate filename with current date and optional date range
       const currentDate = new Date().toISOString().split('T')[0]
       const extension = format === 'sql' ? 'sql' : 'xlsx'
-      link.download = `database_export_${currentDate}.${extension}`
+      let filename = `database_export_${currentDate}`
+      if (databaseDateFrom || databaseDateTo) {
+        filename += `_filtered`
+        if (databaseDateFrom) filename += `_from_${databaseDateFrom}`
+        if (databaseDateTo) filename += `_to_${databaseDateTo}`
+      }
+      link.download = `${filename}.${extension}`
       
       // Trigger download
       document.body.appendChild(link)
@@ -57,16 +79,27 @@ function SettingsPage() {
     setIsExportingDashboard(true)
     
     try {
-      const blob = await exportAPI.exportDashboardTable()
+      // Prepare date parameters
+      const dateParams = {}
+      if (dashboardDateFrom) dateParams.dateFrom = dashboardDateFrom
+      if (dashboardDateTo) dateParams.dateTo = dashboardDateTo
+      
+      const blob = await exportAPI.exportDashboardTable(dateParams)
       
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       
-      // Generate filename with current date
+      // Generate filename with current date and optional date range
       const currentDate = new Date().toISOString().split('T')[0]
-      link.download = `dashboard_table_export_${currentDate}.xlsx`
+      let filename = `dashboard_table_export_${currentDate}`
+      if (dashboardDateFrom || dashboardDateTo) {
+        filename += `_filtered`
+        if (dashboardDateFrom) filename += `_from_${dashboardDateFrom}`
+        if (dashboardDateTo) filename += `_to_${dashboardDateTo}`
+      }
+      link.download = `${filename}.xlsx`
       
       // Trigger download
       document.body.appendChild(link)
@@ -98,16 +131,27 @@ function SettingsPage() {
     setIsExportingTasks(true)
     
     try {
-      const blob = await exportAPI.exportTasksTable()
+      // Prepare date parameters
+      const dateParams = {}
+      if (tasksDateFrom) dateParams.dateFrom = tasksDateFrom
+      if (tasksDateTo) dateParams.dateTo = tasksDateTo
+      
+      const blob = await exportAPI.exportTasksTable(dateParams)
       
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       
-      // Generate filename with current date
+      // Generate filename with current date and optional date range
       const currentDate = new Date().toISOString().split('T')[0]
-      link.download = `tasks_export_${currentDate}.xlsx`
+      let filename = `tasks_export_${currentDate}`
+      if (tasksDateFrom || tasksDateTo) {
+        filename += `_filtered`
+        if (tasksDateFrom) filename += `_from_${tasksDateFrom}`
+        if (tasksDateTo) filename += `_to_${tasksDateTo}`
+      }
+      link.download = `${filename}.xlsx`
       
       // Trigger download
       document.body.appendChild(link)
@@ -139,16 +183,27 @@ function SettingsPage() {
     setIsExportingFinitions(true)
     
     try {
-      const blob = await exportAPI.exportFinitionsTable()
+      // Prepare date parameters
+      const dateParams = {}
+      if (finitionsDateFrom) dateParams.dateFrom = finitionsDateFrom
+      if (finitionsDateTo) dateParams.dateTo = finitionsDateTo
+      
+      const blob = await exportAPI.exportFinitionsTable(dateParams)
       
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
       
-      // Generate filename with current date
+      // Generate filename with current date and optional date range
       const currentDate = new Date().toISOString().split('T')[0]
-      link.download = `finitions_export_${currentDate}.xlsx`
+      let filename = `finitions_export_${currentDate}`
+      if (finitionsDateFrom || finitionsDateTo) {
+        filename += `_filtered`
+        if (finitionsDateFrom) filename += `_from_${finitionsDateFrom}`
+        if (finitionsDateTo) filename += `_to_${finitionsDateTo}`
+      }
+      link.download = `${filename}.xlsx`
       
       // Trigger download
       document.body.appendChild(link)
@@ -189,6 +244,40 @@ function SettingsPage() {
               Exportez toutes les données du tableau de bord principal avec tous les colonnes en format Excel.
             </p>
             
+            {/* Date Range Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Sélection de période (optionnel)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="dashboard-date-from" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    id="dashboard-date-from"
+                    value={dashboardDateFrom}
+                    onChange={(e) => setDashboardDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="dashboard-date-to" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    id="dashboard-date-to"
+                    value={dashboardDateTo}
+                    onChange={(e) => setDashboardDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Laissez vide pour exporter toutes les données
+              </p>
+            </div>
+            
             <button
               onClick={handleExportDashboardTable}
               disabled={isExportingDashboard}
@@ -218,6 +307,40 @@ function SettingsPage() {
             <p className="text-gray-600 mb-6">
               Exportez toutes les tâches d'atelier avec leurs détails en format Excel.
             </p>
+            
+            {/* Date Range Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Sélection de période (optionnel)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="tasks-date-from" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    id="tasks-date-from"
+                    value={tasksDateFrom}
+                    onChange={(e) => setTasksDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="tasks-date-to" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    id="tasks-date-to"
+                    value={tasksDateTo}
+                    onChange={(e) => setTasksDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Laissez vide pour exporter toutes les données
+              </p>
+            </div>
             
             <button
               onClick={handleExportTasksTable}
@@ -249,6 +372,40 @@ function SettingsPage() {
               Exportez toutes les finitions avec agent finition, PMS, article, la finition, quantité, date début et date fin en format Excel.
             </p>
             
+            {/* Date Range Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Sélection de période (optionnel)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="finitions-date-from" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    id="finitions-date-from"
+                    value={finitionsDateFrom}
+                    onChange={(e) => setFinitionsDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="finitions-date-to" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    id="finitions-date-to"
+                    value={finitionsDateTo}
+                    onChange={(e) => setFinitionsDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Laissez vide pour exporter toutes les données
+              </p>
+            </div>
+            
             <button
               onClick={handleExportFinitionsTable}
               disabled={isExportingFinitions}
@@ -278,6 +435,40 @@ function SettingsPage() {
             <p className="text-gray-600 mb-6">
               Exportez la base de données complète pour des fins de sauvegarde ou d'analyse. Choisissez entre le format Excel pour l'analyse de données ou le format SQL pour la restauration de base de données.
             </p>
+            
+            {/* Date Range Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Sélection de période (optionnel)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="database-date-from" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    id="database-date-from"
+                    value={databaseDateFrom}
+                    onChange={(e) => setDatabaseDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="database-date-to" className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    id="database-date-to"
+                    value={databaseDateTo}
+                    onChange={(e) => setDatabaseDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB]"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Laissez vide pour exporter toutes les données
+              </p>
+            </div>
             
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Excel Export Button */}
