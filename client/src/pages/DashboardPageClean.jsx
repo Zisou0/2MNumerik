@@ -1088,7 +1088,7 @@ const DashboardPageClean = () => {
 
   // Date formatting
   const formatDate = (dateString) => {
-    if (!dateString) return '-'
+    if (!dateString) return <span className="font-bold">Client surplace</span>
     return new Date(dateString).toLocaleString('fr-FR', {
       day: '2-digit',
       month: '2-digit',
