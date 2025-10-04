@@ -1473,6 +1473,7 @@ class OrderController {
     try {
       const { orderId, orderProductId } = req.params;
       const {
+        productId, // Add productId support
         quantity,
         numero_pms,
         infograph_en_charge,
@@ -1509,6 +1510,15 @@ class OrderController {
       // Store the original etape and status for notification checking
       const originalEtape = orderProduct.etape;
       const originalStatus = orderProduct.statut;
+
+      // Validate product exists if productId is being changed
+      if (productId && productId !== orderProduct.product_id) {
+        const productExists = await Product.findByPk(productId, { transaction });
+        if (!productExists) {
+          await transaction.rollback();
+          return res.status(400).json({ message: 'Le produit spécifié n\'existe pas' });
+        }
+      }
 
       // Validation: Check if trying to change status to 'termine'
       if (statut === 'termine' && originalStatus !== 'termine') {
@@ -1566,6 +1576,7 @@ class OrderController {
 
       // Update the order product
       await orderProduct.update({
+        product_id: productId, // Add product_id update support
         quantity,
         numero_pms,
         infograph_en_charge,
