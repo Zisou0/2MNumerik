@@ -308,16 +308,16 @@ export const NotificationProvider = ({ children }) => {
         gap: 0.08
       },
       atelier: {
-        frequencies: [600, 800], // Same pleasant two-tone chime as normal
-        volume: 0.3,
-        duration: 0.12,
-        gap: 0.08
+        frequencies: [900, 400, 900, 400, 900], // Alternating high-low alarm pattern
+        volume: 0.9, // Very loud
+        duration: 0.25, // Longer beeps
+        gap: 0.1 // Shorter gaps between beeps
       },
       commercial: {
-        frequencies: [600, 800], // Same pleasant two-tone chime as normal and atelier
-        volume: 0.3,
-        duration: 0.12,
-        gap: 0.08
+        frequencies: [523, 659, 784, 1047], // Success melody: C5, E5, G5, C6 (major chord progression)
+        volume: 0.6,
+        duration: 0.3,
+        gap: 0.1
       }
     };
 
