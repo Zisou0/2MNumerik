@@ -12,6 +12,7 @@ class OrderController {
         atelier,
         infographe,
         infograph, // Alternative parameter name for frontend compatibility
+        infograph_null, // Special parameter to include orders with no assigned graphiste
         agent_impression, // Filter by atelier user (agent impression)
         machine_impression, // Filter by machine impression
         etape,
@@ -46,11 +47,28 @@ class OrderController {
         productWhere.atelier_concerne = { [Op.in]: atelierValues };
       }
       
-      // Handle infograph filter - support multiple values
-      if (infographe || infograph) {
+      // Handle infograph filter - support multiple values and null values
+      if (infographe || infograph || req.query.infograph_null) {
         const infographValue = infographe || infograph;
-        const infographValues = infographValue.includes(',') ? infographValue.split(',') : [infographValue];
-        productWhere.infograph_en_charge = { [Op.in]: infographValues };
+        const includeNull = req.query.infograph_null === 'true';
+        
+        if (infographValue && includeNull) {
+          // Both specific users and null values
+          const infographValues = infographValue.includes(',') ? infographValue.split(',') : [infographValue];
+          productWhere.infograph_en_charge = { 
+            [Op.or]: [
+              { [Op.in]: infographValues },
+              { [Op.is]: null }
+            ]
+          };
+        } else if (includeNull) {
+          // Only null values (no graphiste assigned)
+          productWhere.infograph_en_charge = { [Op.is]: null };
+        } else if (infographValue) {
+          // Only specific users
+          const infographValues = infographValue.includes(',') ? infographValue.split(',') : [infographValue];
+          productWhere.infograph_en_charge = { [Op.in]: infographValues };
+        }
       }
       
       // Handle agent_impression filter - support multiple values

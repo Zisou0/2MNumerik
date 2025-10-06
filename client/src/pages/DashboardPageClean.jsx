@@ -812,7 +812,25 @@ const DashboardPageClean = () => {
         if (Array.isArray(value)) {
           // For array filters, convert to comma-separated string if not empty
           if (value.length > 0) {
-            params[key] = value.join(',')
+            // Special handling for infograph filter with "nothing" value
+            if (key === 'infograph') {
+              const hasNothingFilter = value.includes('nothing')
+              const userFilters = value.filter(f => f !== 'nothing')
+              
+              if (hasNothingFilter && userFilters.length === 0) {
+                // Only "nothing" is selected - send special parameter
+                params['infograph_null'] = 'true'
+              } else if (hasNothingFilter && userFilters.length > 0) {
+                // Both "nothing" and users are selected - send users + null flag
+                params[key] = userFilters.join(',')
+                params['infograph_null'] = 'true'
+              } else {
+                // Only users are selected - normal behavior
+                params[key] = value.join(',')
+              }
+            } else {
+              params[key] = value.join(',')
+            }
           }
         } else {
           // For string filters, only add if not empty
@@ -2310,8 +2328,25 @@ const DashboardPageClean = () => {
         return false
       }
       
-      if (filters.infograph.length > 0 && (!row.infograph_en_charge || !filters.infograph.includes(row.infograph_en_charge))) {
-        return false
+      if (filters.infograph.length > 0) {
+        const hasNothingFilter = filters.infograph.includes('nothing')
+        const hasUserFilters = filters.infograph.filter(f => f !== 'nothing')
+        
+        let matchesInfographFilter = false
+        
+        // Check if "nothing" filter matches (no infograph assigned - null, undefined, or empty string)
+        if (hasNothingFilter && (row.infograph_en_charge === null || row.infograph_en_charge === undefined || row.infograph_en_charge === '' || (typeof row.infograph_en_charge === 'string' && row.infograph_en_charge.trim() === ''))) {
+          matchesInfographFilter = true
+        }
+        
+        // Check if any user filter matches
+        if (hasUserFilters.length > 0 && row.infograph_en_charge && hasUserFilters.includes(row.infograph_en_charge)) {
+          matchesInfographFilter = true
+        }
+        
+        if (!matchesInfographFilter) {
+          return false
+        }
       }
       
       if (filters.agent_impression.length > 0 && (!row.agent_impression || !filters.agent_impression.includes(row.agent_impression))) {
@@ -2555,7 +2590,10 @@ const DashboardPageClean = () => {
 
               {/* 4. Infograph Filter - Multi-select dropdown */}
               <MultiSelectDropdown
-                options={infographUsers.map(user => ({ value: user.username, label: user.username }))}
+                options={[
+                  { value: 'nothing', label: 'Aucun graphiste assigné' },
+                  ...infographUsers.map(user => ({ value: user.username, label: user.username }))
+                ]}
                 selectedValues={filters.infograph}
                 onChange={(value) => toggleMultiSelectFilter('infograph', value)}
                 placeholder="Infographe"
