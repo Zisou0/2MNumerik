@@ -308,9 +308,9 @@ export const NotificationProvider = ({ children }) => {
         gap: 0.08
       },
       atelier: {
-        frequencies: [900, 400, 900, 400, 900], // Alternating high-low alarm pattern
+        frequencies: [ 1047], // Alternating high-low alarm pattern
         volume: 0.9, // Very loud
-        duration: 0.25, // Longer beeps
+        duration: 4, // Longer beeps
         gap: 0.1 // Shorter gaps between beeps
       },
       commercial: {

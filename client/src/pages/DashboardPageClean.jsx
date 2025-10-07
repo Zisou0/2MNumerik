@@ -1022,6 +1022,19 @@ const DashboardPageClean = () => {
       if (isExpressA && !isExpressB) return -1 // A is express, B is not - A goes first
       if (!isExpressA && isExpressB) return 1  // B is express, A is not - B goes first
       
+      // If both are express orders, prioritize those with client surplace (null delivery date)
+      if (isExpressA && isExpressB) {
+        // Check for null date_limite_livraison_estimee (client surplace)
+        const isClientSurplaceA = !a.date_limite_livraison_estimee || a.date_limite_livraison_estimee === null
+        const isClientSurplaceB = !b.date_limite_livraison_estimee || b.date_limite_livraison_estimee === null
+        
+        // Client surplace express orders go first
+        if (isClientSurplaceA && !isClientSurplaceB) return -1
+        if (!isClientSurplaceA && isClientSurplaceB) return 1
+        
+        // If both are client surplace or both have delivery dates, continue with normal sorting
+      }
+      
       // If both are express or both are not express, sort by urgency
       const urgencyA = getOrderUrgency(a)
       const urgencyB = getOrderUrgency(b)
