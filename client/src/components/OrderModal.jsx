@@ -420,11 +420,12 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
         date_limite_livraison_estimee: null
       }))
       
-      // Also clear dates from all existing products
+      // Also clear dates from all existing products and set express to "oui"
       setSelectedProducts(prevProducts => {
         const updatedProducts = prevProducts.map(product => ({
           ...product,
-          date_limite_livraison_estimee: null
+          date_limite_livraison_estimee: null,
+          express: 'oui' // Set express to "oui" when client surplace is selected
         }))
         return updatedProducts
       })
@@ -476,7 +477,7 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       atelier_concerne: '',
       estimated_work_time_minutes: '',
       bat: '',
-      express: '',
+      express: clientSurplace ? 'oui' : '', // Set express to "oui" if client surplace is selected
       pack_fin_annee: 'false',
       commentaires: '',
       type_sous_traitance: '',

@@ -1305,81 +1305,238 @@ class OrderController {
         productWhere.numero_pms = { [Op.like]: `%${search}%` };
       }
       
-      // Client filtering
+      // First, get the total count for pagination metadata  
+      let totalCount;
+      
       if (client) {
-        whereClause[Op.or] = [
-          { client: { [Op.like]: `%${client}%` } },
-          { '$clientInfo.nom$': { [Op.like]: `%${client}%` } }
-        ];
-      }
-
-      // First, get the total count for pagination metadata
-      const totalCount = await OrderProduct.count({
-        where: productWhere,
-        include: [
-          {
-            model: Order,
-            as: 'order',
-            where: whereClause,
-            required: true,
-            include: [
-              {
-                model: Client,
-                as: 'clientInfo',
-                attributes: []
-              }
+        // When client filtering is needed, use a simpler approach
+        // First get all orders that match the client search (both legacy client field and clientInfo.nom)
+        const matchingOrders = await Order.findAll({
+          where: {
+            ...whereClause,
+            [Op.or]: [
+              { client: { [Op.like]: `%${client}%` } }
             ]
+          },
+          include: [
+            {
+              model: Client,
+              as: 'clientInfo',
+              where: {
+                nom: { [Op.like]: `%${client}%` }
+              },
+              required: false
+            }
+          ],
+          attributes: ['id']
+        });
+        
+        // Extract order IDs that match client search (either by legacy field or clientInfo)
+        const orderIds = [];
+        matchingOrders.forEach(order => {
+          orderIds.push(order.id);
+        });
+        
+        // Also get orders where clientInfo matches but the main query didn't catch them
+        const clientMatchingOrders = await Order.findAll({
+          include: [
+            {
+              model: Client,
+              as: 'clientInfo',
+              where: {
+                nom: { [Op.like]: `%${client}%` }
+              },
+              required: true
+            }
+          ],
+          where: whereClause,
+          attributes: ['id']
+        });
+        
+        clientMatchingOrders.forEach(order => {
+          if (!orderIds.includes(order.id)) {
+            orderIds.push(order.id);
           }
-        ],
-        distinct: true
-      });
+        });
+        
+        if (orderIds.length === 0) {
+          totalCount = 0;
+        } else {
+          // Count order products for matching orders
+          totalCount = await OrderProduct.count({
+            where: {
+              ...productWhere,
+              order_id: { [Op.in]: orderIds }
+            },
+            distinct: true
+          });
+        }
+      } else {
+        // No client filtering, use normal count
+        totalCount = await OrderProduct.count({
+          where: productWhere,
+          include: [
+            {
+              model: Order,
+              as: 'order',
+              where: whereClause,
+              required: true
+            }
+          ],
+          distinct: true
+        });
+      }
 
       // Calculate pagination
       const totalPages = Math.ceil(totalCount / limitNumber);
       const offset = (pageNumber - 1) * limitNumber;
 
       // Query for the paginated order products directly
-      const orderProducts = await OrderProduct.findAll({
-        where: productWhere,
-        include: [
-          {
-            model: Order,
-            as: 'order',
-            where: whereClause,
-            required: true,
-            include: [
-              {
-                model: Client,
-                as: 'clientInfo',
-                attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client']
-              }
+      let orderProducts;
+      
+      if (client) {
+        // When client filtering is needed, use the same approach as count
+        // First get all orders that match the client search
+        const matchingOrders = await Order.findAll({
+          where: {
+            ...whereClause,
+            [Op.or]: [
+              { client: { [Op.like]: `%${client}%` } }
             ]
           },
-          {
-            model: Product,
-            as: 'product',
-            attributes: ['id', 'name', 'estimated_creation_time']
-          },
-          {
-            model: OrderProductFinition,
-            as: 'orderProductFinitions',
-            include: [
-              {
-                model: Finition,
-                as: 'finition',
-                attributes: ['id', 'name', 'description']
-              }
-            ]
+          include: [
+            {
+              model: Client,
+              as: 'clientInfo',
+              where: {
+                nom: { [Op.like]: `%${client}%` }
+              },
+              required: false
+            }
+          ],
+          attributes: ['id']
+        });
+        
+        // Extract order IDs that match client search
+        const orderIds = [];
+        matchingOrders.forEach(order => {
+          orderIds.push(order.id);
+        });
+        
+        // Also get orders where clientInfo matches
+        const clientMatchingOrders = await Order.findAll({
+          include: [
+            {
+              model: Client,
+              as: 'clientInfo',
+              where: {
+                nom: { [Op.like]: `%${client}%` }
+              },
+              required: true
+            }
+          ],
+          where: whereClause,
+          attributes: ['id']
+        });
+        
+        clientMatchingOrders.forEach(order => {
+          if (!orderIds.includes(order.id)) {
+            orderIds.push(order.id);
           }
-        ],
-        limit: limitNumber,
-        offset: offset,
-        order: [
-          ['updatedAt', 'DESC'], // OrderProduct's updatedAt for recency
-          ['id', 'ASC'] // Secondary sort for consistent ordering
-        ],
-        distinct: true
-      });
+        });
+        
+        if (orderIds.length === 0) {
+          orderProducts = [];
+        } else {
+          // Get order products for matching orders
+          orderProducts = await OrderProduct.findAll({
+            where: {
+              ...productWhere,
+              order_id: { [Op.in]: orderIds }
+            },
+            include: [
+              {
+                model: Order,
+                as: 'order',
+                include: [
+                  {
+                    model: Client,
+                    as: 'clientInfo',
+                    attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client'],
+                    required: false
+                  }
+                ]
+              },
+              {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name', 'estimated_creation_time']
+              },
+              {
+                model: OrderProductFinition,
+                as: 'orderProductFinitions',
+                include: [
+                  {
+                    model: Finition,
+                    as: 'finition',
+                    attributes: ['id', 'name', 'description']
+                  }
+                ]
+              }
+            ],
+            limit: limitNumber,
+            offset: offset,
+            order: [
+              ['updatedAt', 'DESC'], // OrderProduct's updatedAt for recency
+              ['id', 'ASC'] // Secondary sort for consistent ordering
+            ]
+          });
+        }
+      } else {
+        // No client filtering, use normal query
+        orderProducts = await OrderProduct.findAll({
+          where: productWhere,
+          include: [
+            {
+              model: Order,
+              as: 'order',
+              where: whereClause,
+              required: true,
+              include: [
+                {
+                  model: Client,
+                  as: 'clientInfo',
+                  attributes: ['id', 'nom', 'code_client', 'email', 'telephone', 'adresse', 'type_client'],
+                  required: false
+                }
+              ]
+            },
+            {
+              model: Product,
+              as: 'product',
+              attributes: ['id', 'name', 'estimated_creation_time']
+            },
+            {
+              model: OrderProductFinition,
+              as: 'orderProductFinitions',
+              include: [
+                {
+                  model: Finition,
+                  as: 'finition',
+                  attributes: ['id', 'name', 'description']
+                }
+              ]
+            }
+          ],
+          limit: limitNumber,
+          offset: offset,
+          order: [
+            ['updatedAt', 'DESC'], // OrderProduct's updatedAt for recency
+            ['id', 'ASC'] // Secondary sort for consistent ordering
+          ],
+          distinct: true
+        });
+      }
 
       // Format the response to match the expected structure
       const formattedOrders = [];
