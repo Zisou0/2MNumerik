@@ -94,7 +94,7 @@ const createProduct = async (req, res) => {
     }
 
     // Validate atelier_types if provided
-    const validAtelierTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea'];
+    const validAtelierTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea', 'pack_fin_annee'];
     if (atelier_types.length > 0) {
       const invalidTypes = atelier_types.filter(type => !validAtelierTypes.includes(type));
       if (invalidTypes.length > 0) {
@@ -128,7 +128,7 @@ const updateProduct = async (req, res) => {
     }
 
     // Validate atelier_types if provided
-    const validAtelierTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea'];
+    const validAtelierTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea', 'pack_fin_annee'];
     if (atelier_types && atelier_types.length > 0) {
       const invalidTypes = atelier_types.filter(type => !validAtelierTypes.includes(type));
       if (invalidTypes.length > 0) {

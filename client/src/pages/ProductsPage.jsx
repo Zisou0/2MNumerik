@@ -49,7 +49,8 @@ const ProductsPage = () => {
       'petit_format': 'Petit Format',
       'grand_format': 'Grand Format', 
       'sous_traitance': 'Sous-traitance',
-      'service_crea': 'Service Créa'
+      'service_crea': 'Service Créa',
+      'pack_fin_annee': 'Pack fin d\'année'
     }
     return atelierTypes[atelierType] || 'Non assigné'
   }
@@ -60,7 +61,8 @@ const ProductsPage = () => {
       'petit_format': 'bg-blue-100 text-blue-800',
       'grand_format': 'bg-green-100 text-green-800',
       'sous_traitance': 'bg-orange-100 text-orange-800',
-      'service_crea': 'bg-purple-100 text-purple-800'
+      'service_crea': 'bg-purple-100 text-purple-800',
+      'pack_fin_annee': 'bg-rose-100 text-rose-800'
     }
     return colors[atelierType] || 'bg-gray-100 text-gray-800'
   }
@@ -696,7 +698,7 @@ const ProductsPage = () => {
                   Temps de création estimé
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Atelier assigné
+                  Tags
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Finitions
@@ -846,7 +848,7 @@ const ProductsPage = () => {
                   <div className="space-y-1 text-sm text-gray-600">
                     <p><span className="font-medium">ID:</span> {product.id}</p>
                     <p><span className="font-medium">Temps estimé:</span> {product.estimated_creation_time} heures</p>
-                    <p><span className="font-medium">Atelier:</span> 
+                    <p><span className="font-medium">Tags:</span> 
                       {product.atelier_types && product.atelier_types.length > 0 ? (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {product.atelier_types.map((atelierType) => (
@@ -1155,14 +1157,15 @@ const ProductsPage = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Ateliers assignés
+                    Tags
                   </label>
                   <div className="space-y-2">
                     {[
                       { value: 'petit_format', label: 'Petit Format' },
                       { value: 'grand_format', label: 'Grand Format' },
                       { value: 'sous_traitance', label: 'Sous-traitance' },
-                      { value: 'service_crea', label: 'Service Créa' }
+                      { value: 'service_crea', label: 'Service Créa' },
+                      { value: 'pack_fin_annee', label: 'Pack fin d\'année' }
                     ].map((atelier) => (
                       <label key={atelier.value} className="flex items-center">
                         <input

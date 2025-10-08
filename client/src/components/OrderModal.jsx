@@ -438,7 +438,8 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
       'petit format': 'petit_format',
       'grand format': 'grand_format', 
       'sous-traitance': 'sous_traitance',
-      'service crea': 'service_crea'
+      'service crea': 'service_crea',
+      'pack fin d\'anné': 'pack_fin_annee'
     }
     return mapping[atelierOption] || null
   }
@@ -767,7 +768,30 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
 
   const selectProductFromSearch = (productIndex, productObj) => {
     const key = getProductSearchKey(productIndex)
-    updateProduct(productIndex, 'productId', productObj.id)
+    
+    // Create update object with productId and potentially pack_fin_annee
+    const updates = { productId: productObj.id }
+    
+    // Check if the selected product has "pack_fin_annee" or "pack fin d'anné" atelier type
+    if (productObj.atelier_types && 
+        (productObj.atelier_types.includes('pack_fin_annee') || 
+         productObj.atelier_types.includes('pack fin d\'anné'))) {
+      // Auto-set pack fin d'année to "true" if the product has pack_fin_annee atelier type
+      updates.pack_fin_annee = 'true'
+    }
+    
+    // Apply all updates at once, ensuring quantity is preserved
+    const updated = [...selectedProducts]
+    const currentProduct = updated[productIndex]
+    updated[productIndex] = { 
+      ...currentProduct, 
+      ...updates,
+      // Ensure quantity is always a valid number
+      quantity: currentProduct.quantity || 1
+    }
+    setSelectedProducts(updated)
+    
+    // Update search state
     setProductSearchStates(prev => ({
       ...prev,
       [key]: {
@@ -901,8 +925,16 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
     // Validate that all selected products have valid data
     for (let i = 0; i < selectedProducts.length; i++) {
       const product = selectedProducts[i]
-      if (!product.productId || !product.quantity || product.quantity <= 0) {
-        setError(`Produit ${i + 1}: Veuillez sélectionner un produit et spécifier une quantité valide`)
+      
+      // More specific validation messages
+      if (!product.productId) {
+        setError(`Produit ${i + 1}: Veuillez sélectionner un produit`)
+        setLoading(false)
+        return
+      }
+      
+      if (!product.quantity || product.quantity <= 0) {
+        setError(`Produit ${i + 1}: Veuillez spécifier une quantité valide (quantité actuelle: ${product.quantity})`)
         setLoading(false)
         return
       }
@@ -1542,7 +1574,11 @@ const OrderModal = ({ order, onClose, onSave, statusOptions, atelierOptions, eta
                                     <input
                                       type="number"
                                       value={product.quantity}
-                                      onChange={(e) => updateProduct(index, 'quantity', parseInt(e.target.value) || 1)}
+                                      onChange={(e) => {
+                                        const value = e.target.value
+                                        const numValue = value === '' ? 1 : parseInt(value)
+                                        updateProduct(index, 'quantity', isNaN(numValue) ? 1 : Math.max(1, numValue))
+                                      }}
                                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                       min="1"
                                       required

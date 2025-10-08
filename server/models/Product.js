@@ -34,7 +34,7 @@ module.exports = (sequelize) => {
           if (!Array.isArray(value)) {
             throw new Error('atelier_types must be an array');
           }
-          const validTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea'];
+          const validTypes = ['petit_format', 'grand_format', 'sous_traitance', 'service_crea', 'pack_fin_annee'];
           const invalidTypes = value.filter(type => !validTypes.includes(type));
           if (invalidTypes.length > 0) {
             throw new Error(`Invalid atelier types: ${invalidTypes.join(', ')}`);
