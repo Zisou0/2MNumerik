@@ -1749,26 +1749,29 @@ class OrderController {
         }
       }
 
+      // Build update object with only provided fields to preserve existing values
+      const updateData = {};
+      
+      if (productId !== undefined) updateData.product_id = productId;
+      if (quantity !== undefined) updateData.quantity = quantity;
+      if (numero_pms !== undefined) updateData.numero_pms = numero_pms;
+      if (infograph_en_charge !== undefined) updateData.infograph_en_charge = infograph_en_charge;
+      if (agent_impression !== undefined) updateData.agent_impression = agent_impression;
+      if (machine_impression !== undefined) updateData.machine_impression = machine_impression;
+      if (date_limite_livraison_estimee !== undefined) updateData.date_limite_livraison_estimee = date_limite_livraison_estimee;
+      if (etape !== undefined) updateData.etape = etape;
+      if (atelier_concerne !== undefined) updateData.atelier_concerne = atelier_concerne;
+      if (statut !== undefined) updateData.statut = statut;
+      if (estimated_work_time_minutes !== undefined) updateData.estimated_work_time_minutes = estimated_work_time_minutes;
+      if (bat !== undefined) updateData.bat = bat;
+      if (express !== undefined) updateData.express = express;
+      if (pack_fin_annee !== undefined) updateData.pack_fin_annee = pack_fin_annee === 'true' || pack_fin_annee === true;
+      if (commentaires !== undefined) updateData.commentaires = commentaires;
+      if (type_sous_traitance !== undefined) updateData.type_sous_traitance = type_sous_traitance;
+      if (supplier_id !== undefined) updateData.supplier_id = supplier_id;
+
       // Update the order product
-      await orderProduct.update({
-        product_id: productId, // Add product_id update support
-        quantity,
-        numero_pms,
-        infograph_en_charge,
-        agent_impression,
-        machine_impression,
-        date_limite_livraison_estimee,
-        etape,
-        atelier_concerne,
-        statut,
-        estimated_work_time_minutes,
-        bat,
-        express,
-        pack_fin_annee: pack_fin_annee === 'true' || pack_fin_annee === true,
-        commentaires,
-        type_sous_traitance,
-        supplier_id
-      }, { transaction });
+      await orderProduct.update(updateData, { transaction });
 
       // Update finitions if provided
       if (finitions && Array.isArray(finitions)) {

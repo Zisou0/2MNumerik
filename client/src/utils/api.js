@@ -309,6 +309,9 @@ export const exportAPI = {
     if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom)
     if (params.dateTo) queryParams.append('dateTo', params.dateTo)
     
+    // Add columns parameter if provided
+    if (params.columns) queryParams.append('columns', params.columns)
+    
     const queryString = queryParams.toString()
     const url = `${API_BASE_URL}/export/dashboard${queryString ? '?' + queryString : ''}`
     

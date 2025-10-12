@@ -7,8 +7,36 @@ class ExportController {
   // Export dashboard table data to Excel
   static async exportDashboardTable(req, res) {
     try {
-      // Get date range parameters from query
-      const { dateFrom, dateTo } = req.query;
+      // Get date range parameters and column selection from query
+      const { dateFrom, dateTo, columns } = req.query;
+      
+      // Parse selected columns
+      const selectedColumns = columns ? columns.split(',') : null;
+      
+      // Define the column mapping from frontend keys to export data
+      const columnMapping = {
+        'numero_affaire': 'N° Affaire',
+        'numero_dm': 'N° DM',
+        'client': 'Client',
+        'commercial': 'Commercial',
+        'date_limite_livraison_attendue': 'Date Limite Livraison Attendue',
+        'product': 'Produit',
+        'quantity': 'Quantité',
+        'numero_pms': 'N° PMS',
+        'statut': 'Statut',
+        'etape': 'Étape',
+        'atelier': 'Atelier',
+        'graphiste': 'Graphiste',
+        'agent_impression': 'Agent Impression',
+        'delai_estime': 'Délai Estimé',
+        'temps_estime': 'Temps Estimé (min)',
+        'bat': 'BAT',
+        'express': 'Express',
+        'pack_fin_annee': 'Pack Fin Année',
+        'commentaires': 'Commentaires',
+        'date_creation': 'Date Création',
+        'date_modification': 'Date Modification'
+      };
       
       // Build where clause for date filtering
       let dateWhereClause = {};
@@ -60,8 +88,8 @@ class ExportController {
             // Get the actual product status (prioritize product status over order status)
             const productStatus = orderProduct.statut || order.statut;
             
-            flatRows.push({
-              // Order-level fields
+            // Create full row data object
+            const fullRowData = {
               'N° Affaire': order.numero_affaire || '',
               'N° DM': order.numero_dm || '',
               'Client': order.clientInfo?.nom || order.client || '',
@@ -115,7 +143,21 @@ class ExportController {
                   hour: '2-digit',
                   minute: '2-digit'
                 }) : ''
-            });
+            };
+            
+            // Filter columns based on selection
+            if (selectedColumns && selectedColumns.length > 0) {
+              const filteredRowData = {};
+              selectedColumns.forEach(columnKey => {
+                const excelColumnName = columnMapping[columnKey];
+                if (excelColumnName && fullRowData.hasOwnProperty(excelColumnName)) {
+                  filteredRowData[excelColumnName] = fullRowData[excelColumnName];
+                }
+              });
+              flatRows.push(filteredRowData);
+            } else {
+              flatRows.push(fullRowData);
+            }
           });
         }
       });

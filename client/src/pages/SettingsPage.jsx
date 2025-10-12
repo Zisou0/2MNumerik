@@ -2,6 +2,84 @@ import React, { useState } from 'react'
 import { exportAPI } from '../utils/api'
 import { useNotifications } from '../contexts/NotificationContext'
 
+// Multi-Select Dropdown Component
+const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder, className }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  
+  const handleToggle = (value) => {
+    onChange(value)
+  }
+  
+  const selectedCount = selectedValues.length
+  const displayText = selectedCount === 0 
+    ? placeholder 
+    : selectedCount === 1 
+      ? options.find(opt => opt.value === selectedValues[0])?.label || selectedValues[0]
+      : `${selectedCount} sélectionné(s)`
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`${className} flex items-center justify-between w-full text-left focus:outline-none`}
+      >
+        <span className={selectedCount === 0 ? 'text-gray-500' : 'text-gray-900'}>
+          {displayText}
+        </span>
+        <svg className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setIsOpen(false)}
+          />
+          
+          {/* Dropdown */}
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+            {options.map((option) => {
+              const isSelected = selectedValues.includes(option.value)
+              return (
+                <label
+                  key={option.value}
+                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggle(option.value)}
+                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-900">{option.label}</span>
+                </label>
+              )
+            })}
+            
+            {selectedValues.length > 0 && (
+              <div className="border-t border-gray-200 px-3 py-2">
+                <button
+                  onClick={() => {
+                    selectedValues.forEach(value => onChange(value))
+                    setIsOpen(false)
+                  }}
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  Tout désélectionner
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function SettingsPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [isExportingDashboard, setIsExportingDashboard] = useState(false)
@@ -19,7 +97,44 @@ function SettingsPage() {
   const [databaseDateFrom, setDatabaseDateFrom] = useState('')
   const [databaseDateTo, setDatabaseDateTo] = useState('')
   
+  // Dashboard export column selection
+  const availableColumns = [
+    { value: 'numero_affaire', label: 'N° Affaire' },
+    { value: 'numero_dm', label: 'N° DM' },
+    { value: 'client', label: 'Client' },
+    { value: 'commercial', label: 'Commercial' },
+    { value: 'date_limite_livraison_attendue', label: 'Date Limite Livraison Attendue' },
+    { value: 'product', label: 'Produit' },
+    { value: 'quantity', label: 'Quantité' },
+    { value: 'numero_pms', label: 'N° PMS' },
+    { value: 'statut', label: 'Statut' },
+    { value: 'etape', label: 'Étape' },
+    { value: 'atelier', label: 'Atelier' },
+    { value: 'graphiste', label: 'Graphiste' },
+    { value: 'agent_impression', label: 'Agent Impression' },
+    { value: 'delai_estime', label: 'Délai Estimé' },
+    { value: 'temps_estime', label: 'Temps Estimé (min)' },
+    { value: 'bat', label: 'BAT' },
+    { value: 'express', label: 'Express' },
+    { value: 'pack_fin_annee', label: 'Pack Fin Année' },
+    { value: 'commentaires', label: 'Commentaires' },
+    { value: 'date_creation', label: 'Date Création' },
+    { value: 'date_modification', label: 'Date Modification' }
+  ]
+  
+  const [selectedColumns, setSelectedColumns] = useState(
+    availableColumns.map(col => col.value) // Select all columns by default
+  )
+  
   const { addNotification } = useNotifications()
+  
+  const handleColumnToggle = (columnValue) => {
+    setSelectedColumns(prev => 
+      prev.includes(columnValue) 
+        ? prev.filter(col => col !== columnValue)
+        : [...prev, columnValue]
+    )
+  }
 
   const handleExportDatabase = async (format = 'excel') => {
     const setLoadingState = format === 'sql' ? setIsExportingSQL : setIsExporting;
@@ -83,6 +198,11 @@ function SettingsPage() {
       const dateParams = {}
       if (dashboardDateFrom) dateParams.dateFrom = dashboardDateFrom
       if (dashboardDateTo) dateParams.dateTo = dashboardDateTo
+      
+      // Add selected columns
+      if (selectedColumns.length > 0) {
+        dateParams.columns = selectedColumns.join(',')
+      }
       
       const blob = await exportAPI.exportDashboardTable(dateParams)
       
@@ -276,6 +396,39 @@ function SettingsPage() {
               <p className="text-xs text-gray-500 mt-2">
                 Laissez vide pour exporter toutes les données
               </p>
+            </div>
+            
+            {/* Column Selection */}
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Sélection des colonnes</h3>
+              <div className="mb-2">
+                <MultiSelectDropdown
+                  options={availableColumns}
+                  selectedValues={selectedColumns}
+                  onChange={handleColumnToggle}
+                  placeholder="Sélectionnez les colonnes à exporter"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#00AABB] focus:border-[#00AABB] bg-white"
+                />
+              </div>
+              <div className="flex justify-between items-center mt-2">
+                <p className="text-xs text-gray-500">
+                  {selectedColumns.length} colonne(s) sélectionnée(s)
+                </p>
+                <div className="space-x-2">
+                  <button
+                    onClick={() => setSelectedColumns(availableColumns.map(col => col.value))}
+                    className="text-xs text-[#00AABB] hover:text-[#008A99]"
+                  >
+                    Tout sélectionner
+                  </button>
+                  <button
+                    onClick={() => setSelectedColumns([])}
+                    className="text-xs text-red-600 hover:text-red-800"
+                  >
+                    Tout désélectionner
+                  </button>
+                </div>
+              </div>
             </div>
             
             <button
