@@ -222,6 +222,10 @@ const DashboardPageClean = () => {
   const [pendingProblemeChange, setPendingProblemeChange] = useState(null) // { orderProductId, newValue } | null
   const [problemeDescription, setProblemeDescription] = useState('')
   
+  // Finition validation error dialog
+  const [showFinitionErrorDialog, setShowFinitionErrorDialog] = useState(false)
+  const [finitionErrorMessage, setFinitionErrorMessage] = useState('')
+  
   // Users for dropdowns
   const [infographUsers, setInfographUsers] = useState([])
   const [atelierUsers, setAtelierUsers] = useState([])
@@ -301,8 +305,23 @@ const DashboardPageClean = () => {
     ]
   }
 
+  // Helper function to check if order product has finitions
+  const hasFinitions = (orderProductRow) => {
+    // Check new finitions structure first
+    if (orderProductRow.orderProductFinitions && orderProductRow.orderProductFinitions.length > 0) {
+      return true
+    }
+    
+    // Check legacy finitions field
+    if (orderProductRow.finitions && orderProductRow.finitions.length > 0) {
+      return true
+    }
+    
+    return false
+  }
+
   // Helper function to check if 'termine' status can be selected
-  const canSelectTermineStatus = (atelierConcerne, etape, userRole = null) => {
+  const canSelectTermineStatus = (atelierConcerne, etape, userRole = null, orderProductRow = null) => {
     // Special case: infograph users can always select 'termine' for 'service crea'
     if (userRole === 'infograph' && atelierConcerne === 'service crea') {
       return true
@@ -311,6 +330,14 @@ const DashboardPageClean = () => {
     // If atelier is 'sous-traitance', check if 'controle qualité' etape is done
     if (atelierConcerne === 'sous-traitance') {
       return etape === 'controle qualité'
+    }
+    
+    // For ateliers that require finitions: petit format, grand format, sous-traitance
+    if (['petit format', 'grand format', 'sous-traitance'].includes(atelierConcerne)) {
+      // Check if finitions are added (only if orderProductRow is provided)
+      if (orderProductRow && !hasFinitions(orderProductRow)) {
+        return false // Cannot mark as 'termine' without finitions
+      }
     }
     
     // For other ateliers (petit format, grand format, service crea), check if finitions are done
@@ -365,7 +392,7 @@ const DashboardPageClean = () => {
       
       // If it's the 'termine' status, check if it can be selected
       if (option.value === 'termine') {
-        return canSelectTermineStatus(atelierConcerne, currentEtape, user?.role)
+        return canSelectTermineStatus(atelierConcerne, currentEtape, user?.role, null) // Pass null since we don't have orderProductRow in filter context
       }
       
       return true
@@ -1756,7 +1783,8 @@ const DashboardPageClean = () => {
                 
                 // Additional restriction: can only change to 'livre' if current status is 'termine'
                 if (newValue === 'livre' && currentValue !== 'termine') {
-                  setError('Vous ne pouvez changer le statut vers "livré" que si le statut actuel est "terminé".')
+                  setFinitionErrorMessage('Vous ne pouvez changer le statut vers "livré" que si le statut actuel est "terminé".')
+                  setShowFinitionErrorDialog(true)
                   cancelInlineEdit(orderProductRow.orderProductId, 'statut')
                   return
                 }
@@ -1764,22 +1792,26 @@ const DashboardPageClean = () => {
               
               // Validation for atelier and infograph users - cannot change to 'livre'
               if (newValue === 'livre' && (user?.role === 'atelier' || user?.role === 'infograph')) {
-                setError('Vous n\'avez pas l\'autorisation de changer le statut vers "livré". Seuls les administrateurs et commerciaux peuvent effectuer cette action.')
+                setFinitionErrorMessage('Vous n\'avez pas l\'autorisation de changer le statut vers "livré". Seuls les administrateurs et commerciaux peuvent effectuer cette action.')
+                setShowFinitionErrorDialog(true)
                 cancelInlineEdit(orderProductRow.orderProductId, 'statut')
                 return
               }
               
               // Additional validation for 'termine' status
-              if (newValue === 'termine' && !canSelectTermineStatus(orderProductRow.atelier_concerne, orderProductRow.etape, user?.role)) {
+              if (newValue === 'termine' && !canSelectTermineStatus(orderProductRow.atelier_concerne, orderProductRow.etape, user?.role, orderProductRow)) {
                 let errorMessage = 'Impossible de marquer comme terminé. '
                 
                 if (orderProductRow.atelier_concerne === 'sous-traitance') {
                   errorMessage += 'L\'étape "contrôle qualité" doit être terminée.'
+                } else if (['petit format', 'grand format', 'sous-traitance'].includes(orderProductRow.atelier_concerne) && !hasFinitions(orderProductRow)) {
+                  errorMessage += 'Une finition doit être ajoutée avant de marquer comme terminé.'
                 } else {
                   errorMessage += 'L\'étape "finition" doit être terminée.'
                 }
                 
-                setError(errorMessage)
+                setFinitionErrorMessage(errorMessage)
+                setShowFinitionErrorDialog(true)
                 cancelInlineEdit(orderProductRow.orderProductId, 'statut')
                 return
               }
@@ -3365,6 +3397,24 @@ const DashboardPageClean = () => {
           confirmDisabled={!problemeDescription.trim()}
         />
       )}
+
+      {/* Finition validation error dialog */}
+      <AlertDialog
+        isOpen={showFinitionErrorDialog}
+        onClose={() => {
+          setShowFinitionErrorDialog(false)
+          setFinitionErrorMessage('')
+        }}
+        onConfirm={() => {
+          setShowFinitionErrorDialog(false)
+          setFinitionErrorMessage('')
+        }}
+        title="Validation impossible"
+        message={finitionErrorMessage}
+        confirmText="Compris"
+        type="error"
+        showCancel={false}
+      />
     </div>
   )
 }

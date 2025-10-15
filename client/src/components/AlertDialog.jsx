@@ -8,8 +8,9 @@ function AlertDialog({
   message = "Êtes-vous sûr de vouloir continuer ?",
   confirmText = "Confirmer",
   cancelText = "Annuler",
-  type = "warning", // warning, danger, info
-  confirmDisabled = false // New prop to disable confirm button
+  type = "warning", // warning, danger, info, error
+  confirmDisabled = false, // New prop to disable confirm button
+  showCancel = true // New prop to show/hide cancel button
 }) {
   const [isVisible, setIsVisible] = useState(false)
 
@@ -44,6 +45,7 @@ function AlertDialog({
   const getIconColor = () => {
     switch (type) {
       case 'danger': return 'text-red-600'
+      case 'error': return 'text-red-600'
       case 'warning': return 'text-yellow-600'
       case 'info': return 'text-blue-600'
       default: return 'text-yellow-600'
@@ -53,6 +55,7 @@ function AlertDialog({
   const getConfirmButtonColor = () => {
     switch (type) {
       case 'danger': return 'bg-red-600 hover:bg-red-700'
+      case 'error': return 'bg-red-600 hover:bg-red-700'
       case 'warning': return 'bg-yellow-600 hover:bg-yellow-700'
       case 'info': return 'bg-blue-600 hover:bg-blue-700'
       default: return 'bg-yellow-600 hover:bg-yellow-700'
@@ -110,13 +113,15 @@ function AlertDialog({
             >
               {confirmText}
             </button>
-            <button
-              type="button"
-              className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
-              onClick={handleClose}
-            >
-              {cancelText}
-            </button>
+            {showCancel && (
+              <button
+                type="button"
+                className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                onClick={handleClose}
+              >
+                {cancelText}
+              </button>
+            )}
           </div>
         </div>
       </div>
