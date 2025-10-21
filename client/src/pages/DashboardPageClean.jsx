@@ -12,6 +12,7 @@ import { useCommercialNotifications } from '../hooks/useCommercialNotifications'
 import OrderModal from '../components/OrderModal'
 import OrderViewModal from '../components/OrderViewModal'
 import WebSocketStatus from '../components/WebSocketStatus'
+import RoleBasedStats from '../components/RoleBasedStats'
 
 // Multi-Select Dropdown Component
 const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder, className }) => {
@@ -2595,6 +2596,11 @@ const DashboardPageClean = () => {
             <h1 className="text-3xl font-bold text-gray-900">Tableau de bord</h1>
             <WebSocketStatus />
           </div>
+        </div>
+
+        {/* Role-based Statistics Section */}
+        <div className="mb-6">
+          <RoleBasedStats />
         </div>
 
         {/* Restored Original Filter System with Persistence */}

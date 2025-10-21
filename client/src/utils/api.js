@@ -263,6 +263,8 @@ export const statisticsAPI = {
   },
   
   getDashboardStats: () => apiCall('/statistics/dashboard'),
+  
+  getUserStatsByRole: () => apiCall('/statistics/user-stats'),
 }
 
 // Export API calls

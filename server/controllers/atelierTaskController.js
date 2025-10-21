@@ -1,5 +1,6 @@
 const { AtelierTask, User } = require('../models');
 const { Op } = require('sequelize');
+const StatisticsController = require('./statisticsController');
 
 class AtelierTaskController {
   // Get all atelier tasks with filtering and pagination
@@ -158,6 +159,9 @@ class AtelierTaskController {
       const io = req.app.get('io');
       if (io) {
         io.emit('atelierTaskCreated', createdTask);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.status(201).json(createdTask);
@@ -226,6 +230,9 @@ class AtelierTaskController {
       const io = req.app.get('io');
       if (io) {
         io.emit('atelierTaskUpdated', updatedTask);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json(updatedTask);
@@ -252,6 +259,9 @@ class AtelierTaskController {
       const io = req.app.get('io');
       if (io) {
         io.emit('atelierTaskDeleted', { id: task.id });
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json({ message: 'Tâche supprimée avec succès' });
@@ -379,6 +389,9 @@ class AtelierTaskController {
       const io = req.app.get('io');
       if (io) {
         io.emit('atelierTaskUpdated', updatedTask);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json(updatedTask);

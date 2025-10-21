@@ -1,8 +1,17 @@
-const { Order, Product, OrderProduct, Client } = require('../models');
+const { Order, Product, OrderProduct, Client, AtelierTask } = require('../models');
 const { getUser } = require('../config/database');
 const { Op, Sequelize } = require('sequelize');
 
 class StatisticsController {
+  // Helper method to emit statistics updates via WebSocket
+  static emitStatsUpdate(io) {
+    if (io) {
+      console.log('Emitting stats update to all connected clients');
+      io.emit('statsChanged', { 
+        timestamp: new Date(),
+      });
+    }
+  }
   // Get comprehensive business statistics
   static async getBusinessStats(req, res) {
     try {
@@ -445,13 +454,194 @@ class StatisticsController {
     }, {});
   }
 
+  // Get user statistics by role for dashboard rankings
+  static async getUserStatsByRole(req, res) {
+    try {
+      const User = getUser();
+
+      // Get all users with their roles
+      const commercialUsers = await User.findAll({
+        where: { role: 'commercial' },
+        attributes: ['id', 'username', 'role']
+      });
+
+      const infographUsers = await User.findAll({
+        where: { role: 'infograph' },
+        attributes: ['id', 'username', 'role']
+      });
+
+      const atelierUsers = await User.findAll({
+        where: { role: 'atelier' },
+        attributes: ['id', 'username', 'role']
+      });
+
+      // Commercial stats: Count product orders assigned to each commercial (current month only)
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      const commercialStats = await Promise.all(
+        commercialUsers.map(async (user) => {
+          const orderCount = await OrderProduct.count({
+            where: {
+              createdAt: {
+                [Op.between]: [startOfMonth, endOfMonth]
+              }
+            },
+            include: [{
+              model: Order,
+              as: 'order',
+              where: {
+                commercial_en_charge: user.username,
+                statut: { [Op.notIn]: ['annule'] }
+              },
+              attributes: []
+            }]
+          });
+
+          return {
+            username: user.username,
+            productOrderCount: orderCount
+          };
+        })
+      );
+
+      // Sort commercial users by product order count and get top 3
+      const topCommercial = commercialStats
+        .sort((a, b) => b.productOrderCount - a.productOrderCount)
+        .slice(0, 3);
+
+      // Infograph stats: Count different types of product orders (current month only)
+      const infographStats = await Promise.all(
+        infographUsers.map(async (user) => {
+          // Count atelier petit format, grand format, sous traitance
+          const atelierOrderCount = await OrderProduct.count({
+            where: {
+              infograph_en_charge: user.username,
+              atelier_concerne: { [Op.in]: ['petit format', 'grand format', 'sous-traitance'] },
+              statut: { [Op.notIn]: ['annule'] },
+              createdAt: {
+                [Op.between]: [startOfMonth, endOfMonth]
+              }
+            }
+          });
+
+          // Count service crea orders
+          const serviceCreaCount = await OrderProduct.count({
+            where: {
+              infograph_en_charge: user.username,
+              atelier_concerne: 'service crea',
+              statut: { [Op.notIn]: ['annule'] },
+              createdAt: {
+                [Op.between]: [startOfMonth, endOfMonth]
+              }
+            }
+          });
+
+          return {
+            username: user.username,
+            atelierOrderCount: atelierOrderCount, // petit format + grand format + sous traitance
+            serviceCreaCount: serviceCreaCount
+          };
+        })
+      );
+
+      // Atelier stats: Count product orders and tasks assigned (current month only)
+      const atelierStats = await Promise.all(
+        atelierUsers.map(async (user) => {
+          // Count product orders assigned to this atelier user (agent_impression)
+          const productOrderCount = await OrderProduct.count({
+            where: {
+              agent_impression: user.username,
+              statut: { [Op.notIn]: ['annule'] },
+              createdAt: {
+                [Op.between]: [startOfMonth, endOfMonth]
+              }
+            }
+          });
+
+          // Count tasks assigned (check if user.username is in assigned_to JSON array)
+          // Use JSON_CONTAINS for MySQL compatibility with null check
+          let taskCount = 0;
+          try {
+            taskCount = await AtelierTask.count({
+              where: {
+                [Op.and]: [
+                  { assigned_to: { [Op.ne]: null } },
+                  Sequelize.where(
+                    Sequelize.fn('JSON_CONTAINS', 
+                      Sequelize.col('assigned_to'), 
+                      Sequelize.literal(`'"${user.username}"'`)
+                    ), 
+                    true
+                  ),
+                  { status: { [Op.notIn]: ['cancelled'] } },
+                  { createdAt: { [Op.between]: [startOfMonth, endOfMonth] } }
+                ]
+              }
+            });
+          } catch (jsonError) {
+            // Fallback: if JSON_CONTAINS fails, try a simple LIKE query
+            console.warn(`JSON_CONTAINS failed for user ${user.username}, using fallback:`, jsonError.message);
+            taskCount = await AtelierTask.count({
+              where: {
+                assigned_to: { 
+                  [Op.like]: `%"${user.username}"%` 
+                },
+                status: { [Op.notIn]: ['cancelled'] },
+                createdAt: {
+                  [Op.between]: [startOfMonth, endOfMonth]
+                }
+              }
+            });
+          }
+
+          return {
+            username: user.username,
+            productOrderCount: productOrderCount,
+            taskCount: taskCount
+          };
+        })
+      );
+
+      // Sort atelier users by product order count and get top 3
+      const topAtelier = atelierStats
+        .sort((a, b) => b.productOrderCount - a.productOrderCount)
+        .slice(0, 3);
+
+      res.json({
+        success: true,
+        data: {
+          commercial: {
+            ranking: topCommercial,
+            all: commercialStats
+          },
+          infograph: {
+            all: infographStats // No ranking for infograph, show all users
+          },
+          atelier: {
+            ranking: topAtelier,
+            all: atelierStats
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error fetching user stats by role:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération des statistiques utilisateur'
+      });
+    }
+  }
+
   // Get dashboard quick stats (lightweight version)
   static async getDashboardStats(req, res) {
     try {
       // Quick stats for dashboard
       const totalOrders = await Order.count();
       const activeOrders = await Order.count({
-        where: { statut: { [Op.notIn]: ['termine', 'livre', 'annule'] } }
+        where: { statut: { [Op.notIn]: ['annule'] } }
       });
       const totalClients = await Client.count();
       const activeClients = await Client.count({ where: { actif: true } });
@@ -467,12 +657,12 @@ class StatisticsController {
           as: 'order',
           attributes: [],
           where: {
-            statut: { [Op.notIn]: ['termine', 'livre', 'annule'] }
+            statut: { [Op.notIn]: ['annule'] }
           }
         }],
         where: {
           date_limite_livraison_estimee: { [Op.lte]: urgentThreshold },
-          statut: { [Op.notIn]: ['termine', 'livre', 'annule'] }
+          statut: { [Op.notIn]: ['annule'] }
         },
         distinct: true,
         col: 'order_id'
@@ -502,6 +692,15 @@ class StatisticsController {
         success: false,
         message: 'Erreur lors de la récupération des statistiques'
       });
+    }
+  }
+
+  // Static method to trigger stats update from other controllers
+  static triggerStatsUpdate(req) {
+    const io = req.app.get('io');
+    if (io) {
+      console.log('Triggering stats update from external controller');
+      StatisticsController.emitStatsUpdate(io);
     }
   }
 }

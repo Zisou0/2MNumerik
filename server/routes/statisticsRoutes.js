@@ -21,5 +21,6 @@ const requireAdmin = (req, res, next) => {
 // Statistics routes (admin only)
 router.get('/business', requireAdmin, StatisticsController.getBusinessStats);
 router.get('/dashboard', StatisticsController.getDashboardStats);
+router.get('/user-stats', StatisticsController.getUserStatsByRole);
 
 module.exports = router;

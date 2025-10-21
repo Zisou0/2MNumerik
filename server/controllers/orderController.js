@@ -1,5 +1,6 @@
 const { Order, Product, OrderProduct, OrderProductFinition, Finition, Client, Supplier } = require('../models');
 const { Op, Sequelize } = require('sequelize');
+const StatisticsController = require('./statisticsController');
 
 class OrderController {
   // Get all orders with optional filtering
@@ -729,6 +730,9 @@ class OrderController {
         
         // Standard order creation notification
         io.emit('orderCreated', completeOrder);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.status(201).json({
@@ -1081,6 +1085,9 @@ class OrderController {
         
         // Standard order update notification
         io.emit('orderUpdated', updatedOrder);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json({
@@ -1132,6 +1139,9 @@ class OrderController {
       const io = req.app.get('io');
       if (io) {
         io.emit('orderDeleted', { id: parseInt(id) });
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json({
@@ -1984,6 +1994,9 @@ class OrderController {
         });
 
         io.emit('orderUpdated', completeOrder);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json({
@@ -2049,6 +2062,9 @@ class OrderController {
           const io = req.app.get('io');
           if (io) {
             io.emit('orderDeleted', { orderId: parseInt(orderId) });
+            
+            // Trigger statistics update
+            StatisticsController.emitStatsUpdate(io);
           }
 
           return res.json({
@@ -2097,6 +2113,9 @@ class OrderController {
       const io = req.app.get('io');
       if (io) {
         io.emit('orderUpdated', completeOrder);
+        
+        // Trigger statistics update
+        StatisticsController.emitStatsUpdate(io);
       }
 
       res.json({
