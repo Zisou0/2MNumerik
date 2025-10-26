@@ -9,6 +9,7 @@ router.use(authenticateToken);
 
 // User routes
 router.get('/', UserController.getAllUsers);
+router.get('/search', UserController.searchUsers);
 router.post('/', UserController.createUser);
 router.get('/:id', UserController.getUserById);
 router.put('/:id', UserController.updateUser);

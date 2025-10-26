@@ -15,7 +15,7 @@ class StatisticsController {
   // Get comprehensive business statistics
   static async getBusinessStats(req, res) {
     try {
-      const { timeFrame = 'all', startDate, endDate } = req.query;
+      const { timeFrame = 'all', startDate, endDate, monthsToShow = '12' } = req.query;
       
       // Build date filter
       let dateFilter = {};
@@ -69,7 +69,7 @@ class StatisticsController {
       const teamStats = await StatisticsController.getTeamStatistics(dateFilter);
       
       // Get monthly trends
-      const monthlyTrends = await StatisticsController.getMonthlyTrends(dateFilter);
+      const monthlyTrends = await StatisticsController.getMonthlyTrends(dateFilter, parseInt(monthsToShow));
 
       res.json({
         success: true,
@@ -95,78 +95,88 @@ class StatisticsController {
 
   // Order statistics helper
   static async getOrderStatistics(dateFilter) {
-    // Total orders by status
-    const ordersByStatus = await Order.findAll({
+    // Convert Order date filter to OrderProduct date filter
+    let orderProductDateFilter = {};
+    if (Object.keys(dateFilter).length > 0) {
+      // Apply the same date filter to OrderProduct.createdAt
+      orderProductDateFilter = dateFilter;
+    }
+
+    // Total product orders by status (using OrderProduct model only)
+    const ordersByStatus = await OrderProduct.findAll({
       attributes: [
         'statut',
         [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
       ],
-      where: dateFilter,
+      where: orderProductDateFilter,
       group: ['statut']
     });
 
-    // Orders by workshop (now in OrderProduct table)
+    // Product orders by workshop
     const ordersByWorkshop = await OrderProduct.findAll({
       attributes: [
         'atelier_concerne',
-        [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('order_id'))), 'count']
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
       ],
-      include: [{
-        model: Order,
-        as: 'order',
-        attributes: [],
-        where: dateFilter
-      }],
       where: {
+        ...orderProductDateFilter,
         atelier_concerne: { [Op.ne]: null }
       },
       group: ['atelier_concerne']
     });
 
-    // Orders by stage (now in OrderProduct table)
+    // Product orders by stage
     const ordersByStage = await OrderProduct.findAll({
       attributes: [
         'etape',
-        [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('order_id'))), 'count']
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
       ],
-      include: [{
-        model: Order,
-        as: 'order',
-        attributes: [],
-        where: dateFilter
-      }],
       where: {
+        ...orderProductDateFilter,
         etape: { [Op.ne]: null }
       },
       group: ['etape']
     });
 
-    // Urgent orders (orders with delivery date within 3 days, now checking OrderProduct table)
+    // Urgent product orders (with delivery date within 3 days)
     const urgentThreshold = new Date(Date.now() + (3 * 24 * 60 * 60 * 1000));
     const urgentOrders = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        attributes: [],
-        where: {
-          ...dateFilter,
-          statut: { [Op.notIn]: ['termine', 'livre', 'annule'] }
-        }
-      }],
       where: {
+        ...orderProductDateFilter,
         date_limite_livraison_estimee: { [Op.lte]: urgentThreshold },
         statut: { [Op.notIn]: ['termine', 'livre', 'annule'] }
-      },
-      distinct: true,
-      col: 'order_id'
+      }
+    });
+
+    // Express product orders
+    const expressOrders = await OrderProduct.count({
+      where: {
+        ...orderProductDateFilter,
+        express: 'oui'
+      }
+    });
+
+    // Standard product orders (express = 'non')
+    const standardOrders = await OrderProduct.count({
+      where: {
+        ...orderProductDateFilter,
+        express: 'non'
+      }
+    });
+
+    // Total product orders count
+    const totalProductOrders = await OrderProduct.count({
+      where: orderProductDateFilter
     });
 
     return {
-      total: await Order.count({ where: dateFilter }),
+      total: totalProductOrders,
       byStatus: StatisticsController.formatGroupedResults(ordersByStatus),
       byWorkshop: StatisticsController.formatGroupedResults(ordersByWorkshop, 'atelier_concerne'),
       byStage: StatisticsController.formatGroupedResults(ordersByStage, 'etape'),
-      urgent: urgentOrders
+      urgent: urgentOrders,
+      express: expressOrders,
+      standard: standardOrders
     };
   }
 
@@ -414,10 +424,10 @@ class StatisticsController {
   }
 
   // Monthly trends helper
-  static async getMonthlyTrends(dateFilter) {
-    // Get last 12 months of data
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+  static async getMonthlyTrends(dateFilter, monthsToShow = 12) {
+    // Get specified number of months of data
+    const monthsAgo = new Date();
+    monthsAgo.setMonth(monthsAgo.getMonth() - monthsToShow);
 
     const monthlyOrders = await Order.findAll({
       attributes: [
@@ -426,7 +436,7 @@ class StatisticsController {
         [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
       ],
       where: {
-        createdAt: { [Op.gte]: twelveMonthsAgo }
+        createdAt: { [Op.gte]: monthsAgo }
       },
       group: [
         Sequelize.fn('YEAR', Sequelize.col('createdAt')),
@@ -638,9 +648,9 @@ class StatisticsController {
   // Get dashboard quick stats (lightweight version)
   static async getDashboardStats(req, res) {
     try {
-      // Quick stats for dashboard
-      const totalOrders = await Order.count();
-      const activeOrders = await Order.count({
+      // Quick stats for dashboard - using OrderProduct for accurate product order counts
+      const totalProductOrders = await OrderProduct.count();
+      const activeProductOrders = await OrderProduct.count({
         where: { statut: { [Op.notIn]: ['annule'] } }
       });
       const totalClients = await Client.count();
@@ -649,31 +659,29 @@ class StatisticsController {
       const User = getUser();
       const totalUsers = await User.count();
 
-      // Urgent orders (now checking OrderProduct table)
+      // Urgent product orders
       const urgentThreshold = new Date(Date.now() + (3 * 24 * 60 * 60 * 1000));
       const urgentOrders = await OrderProduct.count({
-        include: [{
-          model: Order,
-          as: 'order',
-          attributes: [],
-          where: {
-            statut: { [Op.notIn]: ['annule'] }
-          }
-        }],
         where: {
           date_limite_livraison_estimee: { [Op.lte]: urgentThreshold },
           statut: { [Op.notIn]: ['annule'] }
-        },
-        distinct: true,
-        col: 'order_id'
+        }
+      });
+
+      // Express product orders
+      const expressOrders = await OrderProduct.count({
+        where: {
+          express: 'oui'
+        }
       });
 
       res.json({
         success: true,
         stats: {
           orders: {
-            total: totalOrders,
-            active: activeOrders
+            total: totalProductOrders,
+            active: activeProductOrders,
+            express: expressOrders
           },
           clients: {
             total: totalClients,
@@ -702,6 +710,461 @@ class StatisticsController {
       console.log('Triggering stats update from external controller');
       StatisticsController.emitStatsUpdate(io);
     }
+  }
+
+  // Get employee performance statistics
+  static async getEmployeeStats(req, res) {
+    try {
+      const { employeeId } = req.params;
+      const { timeFrame = 'last30days', startDate, endDate, monthsToShow = '12' } = req.query;
+      
+      // Build date filter
+      let dateFilter = {};
+      const now = new Date();
+      
+      switch (timeFrame) {
+        case 'last7days':
+          const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: sevenDaysAgo } };
+          break;
+        case 'last30days':
+          const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: thirtyDaysAgo } };
+          break;
+        case 'last90days':
+          const ninetyDaysAgo = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: ninetyDaysAgo } };
+          break;
+        case 'lastYear':
+          const oneYearAgo = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: oneYearAgo } };
+          break;
+        case 'custom':
+          if (startDate && endDate) {
+            dateFilter = { 
+              createdAt: { 
+                [Op.between]: [new Date(startDate), new Date(endDate)] 
+              } 
+            };
+          }
+          break;
+        case 'all':
+        default:
+          dateFilter = {};
+          break;
+      }
+
+      // Get employee information
+      const User = getUser();
+      const employee = await User.findByPk(employeeId, {
+        attributes: { exclude: ['password'] }
+      });
+
+      if (!employee) {
+        return res.status(404).json({
+          success: false,
+          message: 'Employé non trouvé'
+        });
+      }
+
+      let statsData = {};
+
+      // Get role-specific statistics
+      switch (employee.role) {
+        case 'commercial':
+          statsData = await StatisticsController.getCommercialStats(employee.username, dateFilter, parseInt(monthsToShow));
+          break;
+        case 'infograph':
+          statsData = await StatisticsController.getInfographStats(employee.username, dateFilter, parseInt(monthsToShow));
+          break;
+        case 'atelier':
+          statsData = await StatisticsController.getAtelierStats(employee.username, dateFilter, parseInt(monthsToShow));
+          break;
+        default:
+          statsData = { message: 'Type d\'employé non supporté pour les statistiques' };
+      }
+
+      res.json({
+        success: true,
+        employee: employee.toJSON(),
+        ...statsData
+      });
+
+    } catch (error) {
+      console.error('Error fetching employee statistics:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération des statistiques de l\'employé'
+      });
+    }
+  }
+
+  // Commercial statistics helper
+  static async getCommercialStats(username, dateFilter, monthsToShow) {
+    // Total orders assigned to this commercial
+    const totalOrders = await Order.count({
+      where: {
+        ...dateFilter,
+        commercial_en_charge: username
+      }
+    });
+
+    // Active orders
+    const activeOrders = await Order.count({
+      where: {
+        ...dateFilter,
+        commercial_en_charge: username,
+        statut: { [Op.notIn]: ['annule', 'livre'] }
+      }
+    });
+
+    // Completed orders
+    const completedOrders = await Order.count({
+      where: {
+        ...dateFilter,
+        commercial_en_charge: username,
+        statut: { [Op.in]: ['termine', 'livre'] }
+      }
+    });
+
+    // Monthly trends
+    const monthsAgo = new Date();
+    monthsAgo.setMonth(monthsAgo.getMonth() - monthsToShow);
+
+    const monthlyTrends = await Order.findAll({
+      attributes: [
+        [Sequelize.fn('YEAR', Sequelize.col('createdAt')), 'year'],
+        [Sequelize.fn('MONTH', Sequelize.col('createdAt')), 'month'],
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+      ],
+      where: {
+        commercial_en_charge: username,
+        createdAt: { [Op.gte]: monthsAgo }
+      },
+      group: [
+        Sequelize.fn('YEAR', Sequelize.col('createdAt')),
+        Sequelize.fn('MONTH', Sequelize.col('createdAt'))
+      ],
+      order: [
+        [Sequelize.fn('YEAR', Sequelize.col('createdAt')), 'ASC'],
+        [Sequelize.fn('MONTH', Sequelize.col('createdAt')), 'ASC']
+      ]
+    });
+
+    // Top clients
+    const topClients = await Order.findAll({
+      attributes: [
+        'client_id',
+        [Sequelize.fn('COUNT', Sequelize.col('Order.id')), 'count']
+      ],
+      include: [{
+        model: Client,
+        as: 'clientInfo',
+        attributes: ['nom']
+      }],
+      where: {
+        ...dateFilter,
+        commercial_en_charge: username,
+        client_id: { [Op.ne]: null }
+      },
+      group: ['client_id', 'clientInfo.id'],
+      order: [[Sequelize.fn('COUNT', Sequelize.col('Order.id')), 'DESC']],
+      limit: 10
+    });
+
+    const formattedTrends = monthlyTrends.map(item => ({
+      year: item.dataValues.year,
+      month: item.dataValues.month,
+      monthName: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][item.dataValues.month - 1],
+      count: parseInt(item.dataValues.count)
+    }));
+
+    const formattedTopClients = topClients.map(item => ({
+      name: item.clientInfo?.nom || 'Client inconnu',
+      count: parseInt(item.dataValues.count)
+    }));
+
+    return {
+      commercial: {
+        totalOrders,
+        activeOrders,
+        completedOrders
+      },
+      monthlyTrends: formattedTrends,
+      topItems: formattedTopClients
+    };
+  }
+
+  // Infograph statistics helper
+  static async getInfographStats(username, dateFilter, monthsToShow) {
+    // Apply date filter to OrderProduct through join with Order
+    let orderProductFilter = {
+      infograph_en_charge: username
+    };
+
+    // Total products assigned to this infograph
+    const totalProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: orderProductFilter
+    });
+
+    // Completed products
+    const completedProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        statut: { [Op.in]: ['termine', 'livre'] }
+      }
+    });
+
+    // Service crea products
+    const serviceCreaProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        atelier_concerne: 'service crea'
+      }
+    });
+
+    // Atelier products (petit format, grand format, sous-traitance)
+    const atelierProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        atelier_concerne: { [Op.in]: ['petit format', 'grand format', 'sous-traitance', 'soustraitance'] }
+      }
+    });
+
+    // Monthly trends
+    const monthsAgo = new Date();
+    monthsAgo.setMonth(monthsAgo.getMonth() - monthsToShow);
+
+    const monthlyTrends = await OrderProduct.findAll({
+      attributes: [
+        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'year'],
+        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'month'],
+        [Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'count']
+      ],
+      include: [{
+        model: Order,
+        as: 'order',
+        where: {
+          createdAt: { [Op.gte]: monthsAgo }
+        },
+        attributes: []
+      }],
+      where: orderProductFilter,
+      group: [
+        Sequelize.fn('YEAR', Sequelize.col('order.createdAt')),
+        Sequelize.fn('MONTH', Sequelize.col('order.createdAt'))
+      ],
+      order: [
+        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'ASC'],
+        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'ASC']
+      ]
+    });
+
+    // Top products
+    const topProducts = await OrderProduct.findAll({
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'count']
+      ],
+      include: [{
+        model: Product,
+        as: 'product',
+        attributes: ['nom']
+      }, {
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: orderProductFilter,
+      group: ['product.id'],
+      order: [[Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'DESC']],
+      limit: 10
+    });
+
+    const formattedTrends = monthlyTrends.map(item => ({
+      year: item.dataValues.year,
+      month: item.dataValues.month,
+      monthName: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][item.dataValues.month - 1],
+      count: parseInt(item.dataValues.count)
+    }));
+
+    const formattedTopProducts = topProducts.map(item => ({
+      name: item.product?.name || 'Produit inconnu',
+      count: parseInt(item.dataValues.count)
+    }));
+
+    return {
+      infograph: {
+        totalProducts,
+        completedProducts,
+        serviceCreaProducts,
+        atelierProducts
+      },
+      monthlyTrends: formattedTrends,
+      topItems: formattedTopProducts
+    };
+  }
+
+  // Atelier statistics helper
+  static async getAtelierStats(username, dateFilter, monthsToShow) {
+    // Apply date filter to OrderProduct through join with Order
+    let orderProductFilter = {
+      agent_impression: username
+    };
+
+    // Total products assigned to this atelier user
+    const totalProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: orderProductFilter
+    });
+
+    // Completed products
+    const completedProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        statut: { [Op.in]: ['termine', 'livre'] }
+      }
+    });
+
+    // Total tasks assigned
+    let totalTasks = 0;
+    try {
+      totalTasks = await AtelierTask.count({
+        where: {
+          [Op.and]: [
+            { assigned_to: { [Op.ne]: null } },
+            Sequelize.where(
+              Sequelize.fn('JSON_CONTAINS', 
+                Sequelize.col('assigned_to'), 
+                Sequelize.literal(`'"${username}"'`)
+              ), 
+              true
+            ),
+            { status: { [Op.notIn]: ['cancelled'] } },
+            dateFilter
+          ]
+        }
+      });
+    } catch (jsonError) {
+      // Fallback: if JSON_CONTAINS fails, try a simple LIKE query
+      console.warn(`JSON_CONTAINS failed for user ${username}, using fallback:`, jsonError.message);
+      totalTasks = await AtelierTask.count({
+        where: {
+          assigned_to: { 
+            [Op.like]: `%"${username}"%` 
+          },
+          status: { [Op.notIn]: ['cancelled'] },
+          ...dateFilter
+        }
+      });
+    }
+
+    // Monthly trends for products
+    const monthsAgo = new Date();
+    monthsAgo.setMonth(monthsAgo.getMonth() - monthsToShow);
+
+    const monthlyTrends = await OrderProduct.findAll({
+      attributes: [
+        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'year'],
+        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'month'],
+        [Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'count']
+      ],
+      include: [{
+        model: Order,
+        as: 'order',
+        where: {
+          createdAt: { [Op.gte]: monthsAgo }
+        },
+        attributes: []
+      }],
+      where: orderProductFilter,
+      group: [
+        Sequelize.fn('YEAR', Sequelize.col('order.createdAt')),
+        Sequelize.fn('MONTH', Sequelize.col('order.createdAt'))
+      ],
+      order: [
+        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'ASC'],
+        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'ASC']
+      ]
+    });
+
+    // Top products
+    const topProducts = await OrderProduct.findAll({
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'count']
+      ],
+      include: [{
+        model: Product,
+        as: 'product',
+        attributes: ['name']
+      }, {
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: orderProductFilter,
+      group: ['product.id'],
+      order: [[Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'DESC']],
+      limit: 10
+    });
+
+    const formattedTrends = monthlyTrends.map(item => ({
+      year: item.dataValues.year,
+      month: item.dataValues.month,
+      monthName: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][item.dataValues.month - 1],
+      count: parseInt(item.dataValues.count)
+    }));
+
+    const formattedTopProducts = topProducts.map(item => ({
+      name: item.product?.name || 'Produit inconnu',
+      count: parseInt(item.dataValues.count)
+    }));
+
+    return {
+      atelier: {
+        totalProducts,
+        completedProducts,
+        totalTasks
+      },
+      monthlyTrends: formattedTrends,
+      topItems: formattedTopProducts
+    };
   }
 }
 

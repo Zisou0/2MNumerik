@@ -199,6 +199,15 @@ export const clientAPI = {
   
   searchClients: (query) => apiCall(`/clients/search?q=${encodeURIComponent(query)}`),
   
+  getClientDetailedStats: (id, params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/clients/${id}/statistics${queryString ? '?' + queryString : ''}`);
+  },
+  
   importClientsFromExcel: (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -265,6 +274,17 @@ export const statisticsAPI = {
   getDashboardStats: () => apiCall('/statistics/dashboard'),
   
   getUserStatsByRole: () => apiCall('/statistics/user-stats'),
+  
+  searchEmployees: (query) => apiCall(`/users/search?q=${encodeURIComponent(query)}`),
+  
+  getEmployeeStats: (userId, params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/statistics/employee/${userId}${queryString ? '?' + queryString : ''}`);
+  },
 }
 
 // Export API calls

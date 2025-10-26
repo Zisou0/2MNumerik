@@ -22,5 +22,6 @@ const requireAdmin = (req, res, next) => {
 router.get('/business', requireAdmin, StatisticsController.getBusinessStats);
 router.get('/dashboard', StatisticsController.getDashboardStats);
 router.get('/user-stats', StatisticsController.getUserStatsByRole);
+router.get('/employee/:employeeId', requireAdmin, StatisticsController.getEmployeeStats);
 
 module.exports = router;

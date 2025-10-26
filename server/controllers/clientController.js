@@ -1,4 +1,4 @@
-const { Client, Order } = require('../models');
+const { Client, Order, Product, OrderProduct } = require('../models');
 const { Op } = require('sequelize');
 const XLSX = require('xlsx');
 const multer = require('multer');
@@ -299,6 +299,192 @@ class ClientController {
       res.status(500).json({
         success: false,
         message: 'Erreur lors de la recherche de clients'
+      });
+    }
+  }
+
+  // Get detailed client statistics by ID
+  static async getClientDetailedStats(req, res) {
+    try {
+      const { id } = req.params;
+      const { timeFrame = 'all', startDate, endDate } = req.query;
+
+      // Find the client
+      const client = await Client.findByPk(id);
+      if (!client) {
+        return res.status(404).json({
+          success: false,
+          message: 'Client non trouvé'
+        });
+      }
+
+      // Build date filter
+      let dateFilter = {};
+      const now = new Date();
+      
+      switch (timeFrame) {
+        case 'last7days':
+          const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: sevenDaysAgo } };
+          break;
+        case 'last30days':
+          const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: thirtyDaysAgo } };
+          break;
+        case 'last90days':
+          const ninetyDaysAgo = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: ninetyDaysAgo } };
+          break;
+        case 'lastYear':
+          const oneYearAgo = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
+          dateFilter = { createdAt: { [Op.gte]: oneYearAgo } };
+          break;
+        case 'custom':
+          if (startDate && endDate) {
+            dateFilter = { 
+              createdAt: { 
+                [Op.between]: [new Date(startDate), new Date(endDate)] 
+              } 
+            };
+          }
+          break;
+        case 'all':
+        default:
+          dateFilter = {};
+          break;
+      }
+
+      // Get all orders for this client with the date filter
+      const clientOrders = await Order.findAll({
+        where: {
+          client_id: id,
+          ...dateFilter
+        },
+        include: [
+          {
+            model: OrderProduct,
+            as: 'orderProducts',
+            include: [
+              {
+                model: Product,
+                as: 'product',
+                attributes: ['id', 'name', 'estimated_creation_time']
+              }
+            ]
+          }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+
+      // Calculate statistics
+      const stats = {
+        orders: {
+          total: clientOrders.length,
+          delivered: 0,
+          current: 0,
+          cancelled: 0,
+          byStatus: {},
+          byWorkshop: {}
+        },
+        products: {
+          topProducts: {},
+          totalQuantity: 0,
+          byCategory: {}
+        },
+        revenue: {
+          total: 0,
+          average: 0
+        },
+        timeline: []
+      };
+
+      // Process each order
+      clientOrders.forEach(order => {
+        // Count orders by status
+        const status = order.statut;
+        stats.orders.byStatus[status] = (stats.orders.byStatus[status] || 0) + 1;
+
+        if (status === 'livre') {
+          stats.orders.delivered++;
+        } else if (status === 'annule') {
+          stats.orders.cancelled++;
+        } else {
+          stats.orders.current++;
+        }
+
+        // Process order products
+        if (order.orderProducts) {
+          order.orderProducts.forEach(orderProduct => {
+            const quantity = orderProduct.quantity || 1;
+            const unitPrice = orderProduct.unit_price || 0;
+            const workshop = orderProduct.atelier_concerne;
+            const productName = orderProduct.product ? orderProduct.product.name : 'Produit inconnu';
+
+            // Track top products
+            if (!stats.products.topProducts[productName]) {
+              stats.products.topProducts[productName] = {
+                name: productName,
+                quantity: 0,
+                orders: 0,
+                revenue: 0
+              };
+            }
+            stats.products.topProducts[productName].quantity += quantity;
+            stats.products.topProducts[productName].orders++;
+            stats.products.topProducts[productName].revenue += quantity * unitPrice;
+
+            // Track by workshop
+            if (workshop) {
+              stats.orders.byWorkshop[workshop] = (stats.orders.byWorkshop[workshop] || 0) + 1;
+            }
+
+            // Total quantity and revenue
+            stats.products.totalQuantity += quantity;
+            stats.revenue.total += quantity * unitPrice;
+          });
+        }
+
+        // Timeline data
+        stats.timeline.push({
+          date: order.createdAt,
+          status: order.statut,
+          id: order.id
+        });
+      });
+
+      // Calculate average revenue per order
+      stats.revenue.average = stats.orders.total > 0 ? stats.revenue.total / stats.orders.total : 0;
+
+      // Get top 3 products
+      const topProductsArray = Object.values(stats.products.topProducts)
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 3);
+
+      res.json({
+        success: true,
+        client: {
+          id: client.id,
+          nom: client.nom,
+          code_client: client.code_client,
+          email: client.email,
+          type_client: client.type_client,
+          actif: client.actif
+        },
+        timeFrame,
+        statistics: {
+          ...stats,
+          products: {
+            ...stats.products,
+            topProducts: topProductsArray
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error fetching client detailed stats:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération des statistiques du client'
       });
     }
   }

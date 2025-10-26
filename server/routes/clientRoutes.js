@@ -37,6 +37,9 @@ const requireRole = (roles) => {
 // Get client statistics
 router.get('/stats', ClientController.getClientStats);
 
+// Get detailed client statistics by ID
+router.get('/:id/statistics', ClientController.getClientDetailedStats);
+
 // Search clients (for dropdowns/autocomplete)
 router.get('/search', ClientController.searchClients);
 

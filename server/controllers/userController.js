@@ -201,6 +201,43 @@ class UserController {
       res.status(500).json({ message: 'Erreur serveur' });
     }
   }
+
+  // Search users by username or email
+  static async searchUsers(req, res) {
+    try {
+      const { q } = req.query;
+      
+      if (!q || q.length < 2) {
+        return res.json({ users: [] });
+      }
+
+      const User = getUser();
+      const { Op } = require('sequelize');
+      
+      const users = await User.findAll({
+        where: {
+          [Op.or]: [
+            { username: { [Op.like]: `%${q}%` } },
+            { email: { [Op.like]: `%${q}%` } }
+          ]
+        },
+        attributes: { exclude: ['password'] },
+        limit: 10,
+        order: [['username', 'ASC']]
+      });
+
+      res.json({
+        success: true,
+        users: users
+      });
+    } catch (error) {
+      console.error('Search users error:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Erreur lors de la recherche d\'utilisateurs' 
+      });
+    }
+  }
 }
 
 module.exports = UserController;
