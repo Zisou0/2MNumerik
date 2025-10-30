@@ -1,4 +1,4 @@
-const { Order, Product, OrderProduct, Client, AtelierTask } = require('../models');
+const { Order, Product, OrderProduct, Client, AtelierTask, OrderProductFinition } = require('../models');
 const { getUser } = require('../config/database');
 const { Op, Sequelize } = require('sequelize');
 
@@ -619,6 +619,116 @@ class StatisticsController {
         .sort((a, b) => b.productOrderCount - a.productOrderCount)
         .slice(0, 3);
 
+      // Atelier finitions stats: Count finitions assigned to each atelier user (current month only)
+      console.log('=== DEBUGGING FINITIONS STATS ===');
+      console.log('Date range:', startOfMonth, 'to', endOfMonth);
+      
+      const atelierFinitionsStats = await Promise.all(
+        atelierUsers.map(async (user) => {
+          console.log(`\n--- Checking finitions for user: ${user.username} (ID: ${user.id}) ---`);
+          
+          // Search for the user ID in the assigned_agents array
+          let finitionCount = 0;
+          try {
+            // Use JSON_CONTAINS to search for the user ID (not username)
+            // Use OrderProduct.createdAt for consistency with atelier product orders statistics
+            finitionCount = await OrderProductFinition.count({
+              include: [{
+                model: OrderProduct,
+                as: 'orderProduct',
+                attributes: [],
+                where: {
+                  createdAt: {
+                    [Op.between]: [startOfMonth, endOfMonth]
+                  }
+                }
+              }],
+              where: {
+                [Op.and]: [
+                  { assigned_agents: { [Op.ne]: null } },
+                  Sequelize.where(
+                    Sequelize.fn('JSON_CONTAINS', 
+                      Sequelize.col('assigned_agents'), 
+                      Sequelize.literal(`'${user.id}'`)  // Search for user ID, not username
+                    ), 
+                    true
+                  )
+                ]
+              }
+            });
+          } catch (jsonError) {
+            // Fallback: try LIKE query with user ID
+            console.warn(`JSON_CONTAINS failed for user ${user.username}, using fallback:`, jsonError.message);
+            finitionCount = await OrderProductFinition.count({
+              include: [{
+                model: OrderProduct,
+                as: 'orderProduct',
+                attributes: [],
+                where: {
+                  createdAt: {
+                    [Op.between]: [startOfMonth, endOfMonth]
+                  }
+                }
+              }],
+              where: {
+                assigned_agents: { 
+                  [Op.like]: `%${user.id}%`  // Search for user ID, not username
+                }
+              }
+            });
+          }
+
+          // Count tasks assigned (same logic as atelier stats)
+          let taskCount = 0;
+          try {
+            taskCount = await AtelierTask.count({
+              where: {
+                [Op.and]: [
+                  { assigned_to: { [Op.ne]: null } },
+                  Sequelize.where(
+                    Sequelize.fn('JSON_CONTAINS', 
+                      Sequelize.col('assigned_to'), 
+                      Sequelize.literal(`'"${user.username}"'`)
+                    ), 
+                    true
+                  ),
+                  { status: { [Op.notIn]: ['cancelled'] } },
+                  { createdAt: { [Op.between]: [startOfMonth, endOfMonth] } }
+                ]
+              }
+            });
+          } catch (jsonError) {
+            // Fallback: if JSON_CONTAINS fails, try a simple LIKE query
+            console.warn(`JSON_CONTAINS failed for user ${user.username}, using fallback:`, jsonError.message);
+            taskCount = await AtelierTask.count({
+              where: {
+                assigned_to: { 
+                  [Op.like]: `%"${user.username}"%` 
+                },
+                status: { [Op.notIn]: ['cancelled'] },
+                createdAt: {
+                  [Op.between]: [startOfMonth, endOfMonth]
+                }
+              }
+            });
+          }
+          
+          console.log(`Finitions count for ${user.username} (ID: ${user.id}): ${finitionCount}`);
+          console.log(`Tasks count for ${user.username}: ${taskCount}`);
+
+          return {
+            username: user.username,
+            finitionCount: finitionCount,
+            taskCount: taskCount
+          };
+        })
+      );
+
+      // Sort atelier users by finition + task count and get top 3
+      const topAtelierFinitions = atelierFinitionsStats
+        .sort((a, b) => (b.finitionCount + b.taskCount) - (a.finitionCount + a.taskCount))
+        .slice(0, 3);
+
       res.json({
         success: true,
         data: {
@@ -632,6 +742,10 @@ class StatisticsController {
           atelier: {
             ranking: topAtelier,
             all: atelierStats
+          },
+          atelierFinitions: {
+            ranking: topAtelierFinitions,
+            all: atelierFinitionsStats
           }
         }
       });

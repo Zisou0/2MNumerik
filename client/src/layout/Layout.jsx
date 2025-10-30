@@ -6,7 +6,7 @@ import { useNotifications } from '../contexts/NotificationContext'
 import AlertDialog from '../components/AlertDialog'
 import NotificationContainer from '../components/NotificationContainer'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faBell } from '@fortawesome/free-solid-svg-icons'
+import { faBell, faCrosshairs } from '@fortawesome/free-solid-svg-icons'
 
 function Layout({ onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -48,6 +48,21 @@ function Layout({ onLogout }) {
     setShowLogoutDialog(false)
   }
 
+  const handleFilterClick = () => {
+    // Scroll to the filter section in dashboard with offset for fixed navbar
+    const filterSection = document.querySelector('.filter-section')
+    if (filterSection) {
+      const navbarHeight = 80 // Approximate navbar height + some padding
+      const elementPosition = filterSection.getBoundingClientRect().top + window.pageYOffset
+      const offsetPosition = elementPosition - navbarHeight
+      
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      })
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Alert Dialog */}
@@ -76,8 +91,22 @@ function Layout({ onLogout }) {
             </button>
           </div>
           
-          {/* Right side - User info and notifications */}
+          {/* Right side - Filter icon (dashboard only), User info and notifications */}
           <div className="flex items-center gap-4">
+            {/* Focus icon - only show on dashboard page */}
+            {location.pathname === '/dashboard' && (
+              <button 
+                onClick={handleFilterClick}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200 group"
+                title="Aller aux filtres"
+              >
+                <FontAwesomeIcon 
+                  icon={faCrosshairs} 
+                  className="w-5 h-5 text-gray-600 group-hover:text-[#00AABB] transition-colors duration-200" 
+                />
+              </button>
+            )}
+
             {/* Notification dropdown */}
             <div className="relative" ref={notificationRef}>
               <button 

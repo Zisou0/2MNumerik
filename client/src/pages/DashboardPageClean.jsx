@@ -2604,7 +2604,7 @@ const DashboardPageClean = () => {
         </div>
 
         {/* Restored Original Filter System with Persistence */}
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
+        <div className="bg-white p-4 rounded-lg shadow mb-6 filter-section">
           <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-3 flex-1">
               {/* 1. Search Field - Recherche par N° PMS */}
