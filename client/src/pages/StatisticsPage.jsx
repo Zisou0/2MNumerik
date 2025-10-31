@@ -207,8 +207,8 @@ function StatisticsPage() {
     const byStatus = statistics.orders.byStatus || {};
     
     return {
-      // Active orders = en_cours + problem_technique + termine (real business)
-      activeOrders: (byStatus.en_cours || 0) + (byStatus.problem_technique || 0) + (byStatus.termine || 0),
+      // Active orders = orders still being worked on (excluding termine and livre)
+      activeOrders: (byStatus.problem_technique || 0) + (byStatus.en_cours || 0) + (byStatus.attente_validation || 0) + (byStatus.modification || 0),
       // Delivered orders for selected period
       deliveredOrders: byStatus.livre || 0,
       // Completed orders (ready for delivery)
@@ -238,6 +238,8 @@ function StatisticsPage() {
     status: {
       'problem_technique': '#F59E0B',
       'en_cours': '#3B82F6',
+      'attente_validation': '#F97316',
+      'modification': '#6366F1',
       'termine': '#10B981',
       'livre': '#8B5CF6',
       'annule': '#EF4444'
@@ -407,7 +409,7 @@ function StatisticsPage() {
           </div>
           <h2 className="text-3xl font-bold text-blue-600 mb-1">{businessMetrics.activeOrders}</h2>
           <h3 className="text-lg font-semibold text-gray-700 mb-1">Commandes Actives</h3>
-          <p className="text-sm text-gray-500">Business en cours de traitement</p>
+          <p className="text-sm text-gray-500">En cours de production</p>
           <div className="mt-2 text-xs text-blue-600">
             {businessMetrics.totalOrders > 0 ? formatPercentage((businessMetrics.activeOrders / businessMetrics.totalOrders) * 100) : '0%'} du total
           </div>
@@ -1062,25 +1064,25 @@ function StatisticsPage() {
             {/* Role-based Performance Metrics */}
             {selectedEmployee.role === 'commercial' && employeeStatistics.commercial && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-green-50 rounded-xl p-4 text-center border border-green-200">
-                  <div className="text-2xl font-bold text-green-600 mb-1">
-                    {employeeStatistics.commercial.totalOrders}
-                  </div>
-                  <div className="text-sm font-medium text-green-800">Commandes Totales</div>
-                </div>
-                
                 <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-200">
                   <div className="text-2xl font-bold text-blue-600 mb-1">
-                    {employeeStatistics.commercial.activeOrders}
+                    {employeeStatistics.commercial.currentOrders}
                   </div>
-                  <div className="text-sm font-medium text-blue-800">Commandes Actives</div>
+                  <div className="text-sm font-medium text-blue-800">Commandes En Cours</div>
                 </div>
                 
-                <div className="bg-orange-50 rounded-xl p-4 text-center border border-orange-200">
-                  <div className="text-2xl font-bold text-orange-600 mb-1">
-                    {employeeStatistics.commercial.completedOrders}
+                <div className="bg-green-50 rounded-xl p-4 text-center border border-green-200">
+                  <div className="text-2xl font-bold text-green-600 mb-1">
+                    {employeeStatistics.commercial.deliveredOrders}
                   </div>
-                  <div className="text-sm font-medium text-orange-800">Commandes Terminées</div>
+                  <div className="text-sm font-medium text-green-800">Commandes Livrées</div>
+                </div>
+                
+                <div className="bg-red-50 rounded-xl p-4 text-center border border-red-200">
+                  <div className="text-2xl font-bold text-red-600 mb-1">
+                    {employeeStatistics.commercial.cancelledOrders}
+                  </div>
+                  <div className="text-sm font-medium text-red-800">Commandes Annulées</div>
                 </div>
               </div>
             )}
@@ -1091,7 +1093,7 @@ function StatisticsPage() {
                   <div className="text-2xl font-bold text-blue-600 mb-1">
                     {employeeStatistics.infograph.totalProducts}
                   </div>
-                  <div className="text-sm font-medium text-blue-800">Produits Traités</div>
+                  <div className="text-sm font-medium text-blue-800">Commandes Traités</div>
                 </div>
                 
                 <div className="bg-green-50 rounded-xl p-4 text-center border border-green-200">
@@ -1118,19 +1120,26 @@ function StatisticsPage() {
             )}
 
             {selectedEmployee.role === 'atelier' && employeeStatistics.atelier && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-200">
                   <div className="text-2xl font-bold text-blue-600 mb-1">
-                    {employeeStatistics.atelier.totalProducts}
+                    {employeeStatistics.atelier.currentOrders}
                   </div>
-                  <div className="text-sm font-medium text-blue-800">Produits Assignés</div>
+                  <div className="text-sm font-medium text-blue-800">Commandes En Cours</div>
                 </div>
                 
                 <div className="bg-green-50 rounded-xl p-4 text-center border border-green-200">
                   <div className="text-2xl font-bold text-green-600 mb-1">
-                    {employeeStatistics.atelier.completedProducts}
+                    {employeeStatistics.atelier.deliveredOrders}
                   </div>
-                  <div className="text-sm font-medium text-green-800">Produits Terminés</div>
+                  <div className="text-sm font-medium text-green-800">Commandes Livrées</div>
+                </div>
+                
+                <div className="bg-red-50 rounded-xl p-4 text-center border border-red-200">
+                  <div className="text-2xl font-bold text-red-600 mb-1">
+                    {employeeStatistics.atelier.cancelledOrders}
+                  </div>
+                  <div className="text-sm font-medium text-red-800">Commandes Annulées</div>
                 </div>
                 
                 <div className="bg-purple-50 rounded-xl p-4 text-center border border-purple-200">

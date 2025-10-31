@@ -93,7 +93,7 @@ const RoleBasedStats = () => {
     return (
       <div className="bg-white rounded-lg shadow p-4" key="commercial-stats">
         <h3 className="text-base font-semibold text-gray-900 mb-3">
-          🏆 Top 3 Commerciaux - Commandes Produits
+          🏆 Top 3 Commerciaux - Commandes
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {stats.commercial.ranking.map((commercial, index) => (

@@ -485,33 +485,26 @@ class StatisticsController {
         attributes: ['id', 'username', 'role']
       });
 
-      // Commercial stats: Count product orders assigned to each commercial (current month only)
+      // Commercial stats: Count orders assigned to each commercial (current month only)
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
       const commercialStats = await Promise.all(
         commercialUsers.map(async (user) => {
-          const orderCount = await OrderProduct.count({
+          const orderCount = await Order.count({
             where: {
+              commercial_en_charge: user.username,
+              statut: { [Op.notIn]: ['annule'] },
               createdAt: {
                 [Op.between]: [startOfMonth, endOfMonth]
               }
-            },
-            include: [{
-              model: Order,
-              as: 'order',
-              where: {
-                commercial_en_charge: user.username,
-                statut: { [Op.notIn]: ['annule'] }
-              },
-              attributes: []
-            }]
+            }
           });
 
           return {
             username: user.username,
-            productOrderCount: orderCount
+            productOrderCount: orderCount // Keep the same property name for frontend compatibility
           };
         })
       );
@@ -915,29 +908,30 @@ class StatisticsController {
 
   // Commercial statistics helper
   static async getCommercialStats(username, dateFilter, monthsToShow) {
-    // Total orders assigned to this commercial
-    const totalOrders = await Order.count({
-      where: {
-        ...dateFilter,
-        commercial_en_charge: username
-      }
-    });
-
-    // Active orders
-    const activeOrders = await Order.count({
+    // Current orders (en_cours, problem_technique, termine)
+    const currentOrders = await Order.count({
       where: {
         ...dateFilter,
         commercial_en_charge: username,
-        statut: { [Op.notIn]: ['annule', 'livre'] }
+        statut: { [Op.in]: ['en_cours', 'problem_technique', 'termine'] }
       }
     });
 
-    // Completed orders
-    const completedOrders = await Order.count({
+    // Delivered orders (livre)
+    const deliveredOrders = await Order.count({
       where: {
         ...dateFilter,
         commercial_en_charge: username,
-        statut: { [Op.in]: ['termine', 'livre'] }
+        statut: 'livre'
+      }
+    });
+
+    // Cancelled orders (annule)
+    const cancelledOrders = await Order.count({
+      where: {
+        ...dateFilter,
+        commercial_en_charge: username,
+        statut: 'annule'
       }
     });
 
@@ -1000,9 +994,9 @@ class StatisticsController {
 
     return {
       commercial: {
-        totalOrders,
-        activeOrders,
-        completedOrders
+        currentOrders,
+        deliveredOrders,
+        cancelledOrders
       },
       monthlyTrends: formattedTrends,
       topItems: formattedTopClients
@@ -1106,7 +1100,7 @@ class StatisticsController {
       include: [{
         model: Product,
         as: 'product',
-        attributes: ['nom']
+        attributes: ['name']
       }, {
         model: Order,
         as: 'order',
@@ -1150,19 +1144,8 @@ class StatisticsController {
       agent_impression: username
     };
 
-    // Total products assigned to this atelier user
-    const totalProducts = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
-      where: orderProductFilter
-    });
-
-    // Completed products
-    const completedProducts = await OrderProduct.count({
+    // Current orders (en_cours, problem_technique, termine)
+    const currentOrders = await OrderProduct.count({
       include: [{
         model: Order,
         as: 'order',
@@ -1171,7 +1154,35 @@ class StatisticsController {
       }],
       where: {
         ...orderProductFilter,
-        statut: { [Op.in]: ['termine', 'livre'] }
+        statut: { [Op.in]: ['en_cours', 'problem_technique', 'termine'] }
+      }
+    });
+
+    // Delivered orders (livre)
+    const deliveredOrders = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        statut: 'livre'
+      }
+    });
+
+    // Cancelled orders (annule)
+    const cancelledOrders = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        statut: 'annule'
       }
     });
 
@@ -1272,8 +1283,9 @@ class StatisticsController {
 
     return {
       atelier: {
-        totalProducts,
-        completedProducts,
+        currentOrders,
+        deliveredOrders,
+        cancelledOrders,
         totalTasks
       },
       monthlyTrends: formattedTrends,
