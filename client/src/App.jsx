@@ -17,6 +17,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import DashboardPageClean from './pages/DashboardPageClean'
 import UnauthorizedPage from './pages/UnauthorizedPage'
 import SettingsPage from './pages/SettingsPage'
+import StockManagementPage from './pages/StockManagementPage'
 
 
 // Separate component to use auth context
@@ -109,6 +110,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['admin', 'atelier']}>
               <AtelierTasksPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="stock" 
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'manager']}>
+              <StockManagementPage />
             </ProtectedRoute>
           } 
         />

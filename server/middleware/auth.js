@@ -16,7 +16,16 @@ const checkConnection = (req, res, next) => {
 
 // Middleware to verify JWT token
 const authenticateToken = async (req, res, next) => {
-  const token = req.cookies.token;
+  // Try to get token from cookie first (existing auth method)
+  let token = req.cookies.token;
+  
+  // If no cookie token, try Authorization header (for API calls)
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    }
+  }
 
   if (!token) {
     return res.status(401).json({ message: 'Token d\'accès requis' });

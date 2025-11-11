@@ -846,9 +846,9 @@ const ProductsPage = () => {
                   </div>
                   
                   <div className="space-y-1 text-sm text-gray-600">
-                    <p><span className="font-medium">ID:</span> {product.id}</p>
-                    <p><span className="font-medium">Temps estimé:</span> {product.estimated_creation_time} heures</p>
-                    <p><span className="font-medium">Tags:</span> 
+                    <div><span className="font-medium">ID:</span> {product.id}</div>
+                    <div><span className="font-medium">Temps estimé:</span> {product.estimated_creation_time} heures</div>
+                    <div><span className="font-medium">Tags:</span> 
                       {product.atelier_types && product.atelier_types.length > 0 ? (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {product.atelier_types.map((atelierType) => (
@@ -865,8 +865,8 @@ const ProductsPage = () => {
                           Non assigné
                         </span>
                       )}
-                    </p>
-                    <p><span className="font-medium">Créé le:</span> {new Date(product.createdAt).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                    <div><span className="font-medium">Créé le:</span> {new Date(product.createdAt).toLocaleDateString('fr-FR')}</div>
                     <div>
                       <span className="font-medium">Finitions:</span>
                       {product.finitions && product.finitions.length > 0 ? (
