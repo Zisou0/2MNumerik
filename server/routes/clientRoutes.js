@@ -58,6 +58,12 @@ router.post('/import', requireRole(['admin', 'commercial']), upload.single('file
 // Update client (admin or commercial only)
 router.put('/:id', requireRole(['admin', 'commercial']), ClientController.updateClient);
 
+// Deactivate client (admin or commercial only)
+router.patch('/:id/deactivate', requireRole(['admin', 'commercial']), ClientController.deactivateClient);
+
+// Reactivate client (admin or commercial only)
+router.patch('/:id/reactivate', requireRole(['admin', 'commercial']), ClientController.reactivateClient);
+
 // Delete client (admin only)
 router.delete('/:id', requireRole(['admin']), ClientController.deleteClient);
 

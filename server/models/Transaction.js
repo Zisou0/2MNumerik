@@ -16,6 +16,14 @@ module.exports = (sequelize) => {
         key: 'id'
       }
     },
+    lot_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'lots',
+        key: 'id'
+      }
+    },
     from_location: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -73,6 +81,12 @@ module.exports = (sequelize) => {
     Transaction.belongsTo(models.Item, {
       foreignKey: 'item_id',
       as: 'item'
+    });
+    
+    // Transaction belongs to Lot
+    Transaction.belongsTo(models.Lot, {
+      foreignKey: 'lot_id',
+      as: 'lot'
     });
     
     // Transaction belongs to Location (from)

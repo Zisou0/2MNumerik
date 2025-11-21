@@ -1,4 +1,4 @@
-const { Location, StockLevel, Transaction, Item } = require('../models');
+const { Location, LotLocation, Lot, Transaction, Item } = require('../models');
 const { Op } = require('sequelize');
 
 // Get all locations
@@ -27,14 +27,20 @@ const getAllLocations = async (req, res) => {
       col: 'id', // Specify which column to count distinct on
       include: [
         {
-          model: StockLevel,
-          as: 'stockLevels',
+          model: LotLocation,
+          as: 'lotLocations',
           required: false,
           include: [
             {
-              model: Item,
-              as: 'item',
-              attributes: ['id', 'name', 'description']
+              model: Lot,
+              as: 'lot',
+              include: [
+                {
+                  model: Item,
+                  as: 'item',
+                  attributes: ['id', 'name', 'description']
+                }
+              ]
             }
           ]
         }
@@ -61,9 +67,22 @@ const getLocationById = async (req, res) => {
     const location = await Location.findByPk(id, {
       include: [
         {
-          model: StockLevel,
-          as: 'stockLevels',
-          required: false
+          model: LotLocation,
+          as: 'lotLocations',
+          required: false,
+          include: [
+            {
+              model: Lot,
+              as: 'lot',
+              include: [
+                {
+                  model: Item,
+                  as: 'item',
+                  attributes: ['id', 'name']
+                }
+              ]
+            }
+          ]
         },
         {
           model: Transaction,
@@ -192,14 +211,17 @@ const deleteLocation = async (req, res) => {
       return res.status(404).json({ error: 'Location not found' });
     }
 
-    // Check if location has stock levels
-    const stockLevels = await StockLevel.findAll({
-      where: { location_id: id }
+    // Check if location has lot locations with quantity
+    const lotLocations = await LotLocation.findAll({
+      where: { 
+        location_id: id,
+        quantity: { [Op.gt]: 0 }
+      }
     });
 
-    if (stockLevels.length > 0) {
+    if (lotLocations.length > 0) {
       return res.status(400).json({ 
-        error: 'Cannot delete location with existing stock levels. Please move or remove stock first.' 
+        error: 'Cannot delete location with existing stock. Please move or remove stock first.' 
       });
     }
 

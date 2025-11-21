@@ -29,10 +29,10 @@ module.exports = (sequelize) => {
 
   // Define associations
   Location.associate = function(models) {
-    // Location has many stock levels
-    Location.hasMany(models.StockLevel, {
+    // Location has many lot locations
+    Location.hasMany(models.LotLocation, {
       foreignKey: 'location_id',
-      as: 'stockLevels'
+      as: 'lotLocations'
     });
     
     // Location has many transactions as from_location

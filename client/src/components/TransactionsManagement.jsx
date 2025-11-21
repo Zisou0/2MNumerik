@@ -7,6 +7,9 @@ function TransactionsManagement() {
   const [transactions, setTransactions] = useState([])
   const [items, setItems] = useState([])
   const [locations, setLocations] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [lots, setLots] = useState([]) // Available lots
+  const [availableLots, setAvailableLots] = useState([]) // Filtered lots based on item/location
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showModal, setShowModal] = useState(false)
@@ -34,7 +37,9 @@ function TransactionsManagement() {
     to_location: '',
     quantity: '',
     type: '',
-    created_by: ''
+    created_by: '',
+    lot_id: '', // LOT selection
+    supplier_id: '' // Supplier selection for IN transactions
   })
 
   // Get transaction type labels
@@ -130,11 +135,8 @@ function TransactionsManagement() {
         throw new Error('Failed to fetch items')
       }
       const data = await response.json()
-      // Filter items to only include those with stock levels (emplacements assigned)
-      const itemsWithEmplacements = (data.items || []).filter(item => 
-        item.stockLevels && item.stockLevels.length > 0
-      )
-      setItems(itemsWithEmplacements)
+      // Show all items (no filtering by stock/lots for transaction creation)
+      setItems(data.items || [])
     } catch (err) {
       console.error('Error fetching items:', err)
     }
@@ -154,22 +156,120 @@ function TransactionsManagement() {
     }
   }
 
+  // Fetch suppliers for dropdown
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/suppliers`, {
+        credentials: 'include'
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch suppliers')
+      }
+      const data = await response.json()
+      console.log('Suppliers fetched:', data) // Debug log
+      setSuppliers(data.suppliers || [])
+    } catch (err) {
+      console.error('Error fetching suppliers:', err)
+    }
+  }
+
+  // Fetch lots for dropdown
+  const fetchLots = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/lots?status=active&limit=1000`, {
+        credentials: 'include'
+      })
+      if (!response.ok) throw new Error('Failed to fetch lots')
+      const data = await response.json()
+      setLots(data.lots || [])
+    } catch (err) {
+      console.error('Error fetching lots:', err)
+    }
+  }
+
+  // Filter available lots based on item and location (for TRANSFER/OUT)
+  useEffect(() => {
+    if (formData.type === 'IN') {
+      // For IN transactions, we don't need to select existing lots (they will be created)
+      setAvailableLots([])
+      return
+    }
+
+    if (!formData.item_id) {
+      setAvailableLots([])
+      return
+    }
+
+    // For OUT/TRANSFER/ADJUSTMENT, filter lots by item
+    let filtered = lots.filter(lot => lot.item_id === parseInt(formData.item_id))
+
+    // For TRANSFER and OUT, also filter by source location
+    if ((formData.type === 'TRANSFER' || formData.type === 'OUT') && formData.from_location) {
+      // We need to fetch lot locations to know which lots are available at the source
+      fetchLotsAtLocation(formData.from_location, filtered)
+    } else {
+      setAvailableLots(filtered)
+    }
+  }, [formData.item_id, formData.from_location, formData.type, lots])
+
+  // Fetch lots available at a specific location
+  const fetchLotsAtLocation = async (locationId, itemLots) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/locations/${locationId}`, {
+        credentials: 'include'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch location details: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      // Get lotLocations from the direct response (not nested under location)
+      const lotLocations = data.lotLocations || []
+      
+      // Filter lots that are available at this location with quantity > 0
+      const lotIdsAtLocation = lotLocations
+        .filter(ll => ll.quantity > 0)
+        .map(ll => ll.lot_id)
+      
+      const filtered = itemLots.filter(lot => lotIdsAtLocation.includes(lot.id))
+      setAvailableLots(filtered)
+    } catch (err) {
+      console.error('Error fetching lots at location:', err)
+      setAvailableLots(itemLots) // Fallback to all item lots
+    }
+  }
+
   // Create new transaction
   const createTransaction = async () => {
     try {
+      const payload = {
+        type: formData.type,
+        item_id: parseInt(formData.item_id),
+        quantity: parseInt(formData.quantity),
+        created_by: formData.created_by,
+        from_location: formData.from_location ? parseInt(formData.from_location) : null,
+        to_location: formData.to_location ? parseInt(formData.to_location) : null
+      }
+
+      // Add LOT data
+      if (formData.type !== 'IN' && formData.lot_id) {
+        payload.lot_id = parseInt(formData.lot_id)
+      }
+
+      // Add supplier data for IN transactions
+      if (formData.type === 'IN' && formData.supplier_id) {
+        payload.supplier_id = parseInt(formData.supplier_id)
+      }
+
       const response = await fetch(`${API_BASE_URL}/transactions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({
-          ...formData,
-          quantity: parseInt(formData.quantity),
-          item_id: parseInt(formData.item_id),
-          from_location: formData.from_location ? parseInt(formData.from_location) : null,
-          to_location: formData.to_location ? parseInt(formData.to_location) : null
-        })
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) {
@@ -197,19 +297,25 @@ function TransactionsManagement() {
   // Update transaction
   const updateTransaction = async () => {
     try {
+      const payload = {
+        type: formData.type,
+        item_id: parseInt(formData.item_id),
+        quantity: parseInt(formData.quantity),
+        created_by: formData.created_by,
+        from_location: formData.from_location ? parseInt(formData.from_location) : null,
+        to_location: formData.to_location ? parseInt(formData.to_location) : null
+      }
+
+      // Add LOT data
+      if (formData.lot_id) payload.lot_id = parseInt(formData.lot_id)
+
       const response = await fetch(`${API_BASE_URL}/transactions/${selectedTransaction.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({
-          ...formData,
-          quantity: parseInt(formData.quantity),
-          item_id: parseInt(formData.item_id),
-          from_location: formData.from_location ? parseInt(formData.from_location) : null,
-          to_location: formData.to_location ? parseInt(formData.to_location) : null
-        })
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) {
@@ -336,7 +442,9 @@ function TransactionsManagement() {
       to_location: '',
       quantity: '',
       type: '',
-      created_by: ''
+      created_by: '',
+      lot_id: '',
+      supplier_id: ''
     })
     setShowModal(true)
   }
@@ -350,7 +458,9 @@ function TransactionsManagement() {
       to_location: transaction.to_location ? transaction.to_location.toString() : '',
       quantity: transaction.quantity.toString(),
       type: transaction.type,
-      created_by: transaction.created_by
+      created_by: transaction.created_by,
+      lot_id: transaction.lot_id ? transaction.lot_id.toString() : '',
+      supplier_id: transaction.lot?.supplier?.id ? transaction.lot.supplier.id.toString() : ''
     })
     setShowModal(true)
   }
@@ -364,6 +474,7 @@ function TransactionsManagement() {
   const closeModal = () => {
     setShowModal(false)
     setSelectedTransaction(null)
+    setAvailableLots([])
     setFormData({
       item_id: '',
       from_location: '',
@@ -415,7 +526,9 @@ function TransactionsManagement() {
       ...formData,
       type,
       from_location: type === 'IN' ? '' : formData.from_location,
-      to_location: type === 'OUT' ? '' : formData.to_location
+      to_location: type === 'OUT' ? '' : formData.to_location,
+      lot_id: type === 'IN' ? '' : formData.lot_id, // Reset lot_id for IN transactions
+      supplier_id: type === 'IN' ? formData.supplier_id : '' // Keep supplier_id only for IN transactions
     })
   }
 
@@ -424,6 +537,8 @@ function TransactionsManagement() {
     fetchTransactions()
     fetchItems()
     fetchLocations()
+    fetchSuppliers()
+    fetchLots()
   }, [])
 
   // Handle filter changes
@@ -530,6 +645,9 @@ function TransactionsManagement() {
                   Article
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Lot
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Quantité
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -558,11 +676,28 @@ function TransactionsManagement() {
                     <div className="font-medium text-gray-900">{transaction.item?.name}</div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-700">
+                      {transaction.lot?.lot_number || 'N/A'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{transaction.quantity}</div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-700">
-                      {transaction.fromLocation?.name || '—'} → {transaction.toLocation?.name || '—'}
+                      {transaction.type === 'IN' && transaction.lot?.supplier ? (
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-blue-600 font-medium">{transaction.lot.supplier.nom}</span>
+                            <span className="text-gray-400">→</span>
+                            <span>{transaction.toLocation?.name || '—'}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          {transaction.fromLocation?.name || '—'} → {transaction.toLocation?.name || '—'}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
@@ -801,6 +936,61 @@ function TransactionsManagement() {
                   )}
                 </div>
 
+                {/* Supplier Selection - For IN transactions */}
+                {formData.type === 'IN' && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fournisseur
+                    </label>
+                    <select
+                      value={formData.supplier_id}
+                      onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#00AABB] focus:border-[#00AABB]"
+                    >
+                      <option value="">Sélectionner un fournisseur (optionnel)</option>
+                      {suppliers.map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.nom}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Le fournisseur sera associé au lot créé lors de cette entrée
+                    </p>
+                  </div>
+                )}
+
+                {/* LOT Selection - For OUT/TRANSFER/ADJUSTMENT */}
+                {formData.type && formData.type !== 'IN' && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Lot {(formData.type === 'OUT' || formData.type === 'TRANSFER') ? '*' : ''}
+                    </label>
+                    <select
+                      required={formData.type === 'OUT' || formData.type === 'TRANSFER'}
+                      value={formData.lot_id}
+                      onChange={(e) => setFormData({ ...formData, lot_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#00AABB] focus:border-[#00AABB]"
+                      disabled={!formData.item_id || (formData.type === 'TRANSFER' && !formData.from_location)}
+                    >
+                      <option value="">Sélectionner un lot</option>
+                      {availableLots.map((lot) => (
+                        <option key={lot.id} value={lot.id}>
+                          {lot.lot_number} - {lot.item?.name} 
+                          {lot.expiration_date && ` (Exp: ${new Date(lot.expiration_date).toLocaleDateString('fr-FR')})`}
+                        </option>
+                      ))}
+                    </select>
+                    {availableLots.length === 0 && formData.item_id && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formData.type === 'TRANSFER' && !formData.from_location 
+                          ? 'Sélectionnez un emplacement source pour voir les lots disponibles'
+                          : 'Aucun lot actif disponible pour cet article'}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
@@ -851,6 +1041,42 @@ function TransactionsManagement() {
                   <label className="block text-sm font-medium text-gray-500">Article</label>
                   <p className="text-gray-900">{selectedTransaction.item?.name}</p>
                 </div>
+
+                {selectedTransaction.lot && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Numéro de Lot</label>
+                    <p className="text-gray-900 font-mono">{selectedTransaction.lot.lot_number}</p>
+                    {selectedTransaction.lot.expiration_date && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Expiration: {new Date(selectedTransaction.lot.expiration_date).toLocaleDateString('fr-FR')}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {selectedTransaction.type === 'IN' && selectedTransaction.lot?.supplier && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500">Fournisseur</label>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{selectedTransaction.lot.supplier.nom}</p>
+                          {selectedTransaction.lot.supplier.email && (
+                            <p className="text-sm text-gray-600">{selectedTransaction.lot.supplier.email}</p>
+                          )}
+                          {selectedTransaction.lot.supplier.telephone && (
+                            <p className="text-sm text-gray-600">{selectedTransaction.lot.supplier.telephone}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Quantité</label>

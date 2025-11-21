@@ -210,7 +210,8 @@ class ClientController {
       if (client.orders && client.orders.length > 0) {
         return res.status(400).json({
           success: false,
-          message: 'Impossible de supprimer un client qui a des commandes associées'
+          message: 'Impossible de supprimer un client qui a des commandes associées',
+          orderCount: client.orders.length
         });
       }
 
@@ -225,6 +226,80 @@ class ClientController {
       res.status(500).json({
         success: false,
         message: 'Erreur lors de la suppression du client'
+      });
+    }
+  }
+
+  // Deactivate a client (soft delete)
+  static async deactivateClient(req, res) {
+    try {
+      const { id } = req.params;
+
+      const client = await Client.findByPk(id);
+
+      if (!client) {
+        return res.status(404).json({
+          success: false,
+          message: 'Client non trouvé'
+        });
+      }
+
+      if (!client.actif) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ce client est déjà désactivé'
+        });
+      }
+
+      await client.update({ actif: false });
+
+      res.json({
+        success: true,
+        message: 'Client désactivé avec succès',
+        client
+      });
+    } catch (error) {
+      console.error('Error deactivating client:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la désactivation du client'
+      });
+    }
+  }
+
+  // Reactivate a client
+  static async reactivateClient(req, res) {
+    try {
+      const { id } = req.params;
+
+      const client = await Client.findByPk(id);
+
+      if (!client) {
+        return res.status(404).json({
+          success: false,
+          message: 'Client non trouvé'
+        });
+      }
+
+      if (client.actif) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ce client est déjà actif'
+        });
+      }
+
+      await client.update({ actif: true });
+
+      res.json({
+        success: true,
+        message: 'Client réactivé avec succès',
+        client
+      });
+    } catch (error) {
+      console.error('Error reactivating client:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la réactivation du client'
       });
     }
   }

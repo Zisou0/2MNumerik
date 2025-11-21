@@ -29,10 +29,10 @@ module.exports = (sequelize) => {
 
   // Define associations
   Item.associate = function(models) {
-    // Item has many stock levels
-    Item.hasMany(models.StockLevel, {
+    // Item has many lots
+    Item.hasMany(models.Lot, {
       foreignKey: 'item_id',
-      as: 'stockLevels'
+      as: 'lots'
     });
     
     // Item has many transactions

@@ -1,4 +1,4 @@
-const { Item, StockLevel, Location } = require('../models');
+const { Item, Lot, LotLocation, Location, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // Get all items
@@ -19,13 +19,19 @@ const getAllItems = async (req, res) => {
       where: whereClause,
       include: [
         {
-          model: StockLevel,
-          as: 'stockLevels',
+          model: Lot,
+          as: 'lots',
           include: [
             {
-              model: Location,
-              as: 'location',
-              attributes: ['id', 'name', 'type']
+              model: LotLocation,
+              as: 'lotLocations',
+              include: [
+                {
+                  model: Location,
+                  as: 'location',
+                  attributes: ['id', 'name', 'type']
+                }
+              ]
             }
           ]
         }
@@ -33,8 +39,8 @@ const getAllItems = async (req, res) => {
       order: [[sortBy, sortOrder.toUpperCase()]],
       limit: parseInt(limit),
       offset: parseInt(offset),
-      distinct: true, // This ensures we count distinct items, not joined rows
-      col: 'id' // Specify which column to count distinct on
+      distinct: true,
+      col: 'id'
     });
 
     res.json({
@@ -57,12 +63,18 @@ const getItemById = async (req, res) => {
     const item = await Item.findByPk(id, {
       include: [
         {
-          model: StockLevel,
-          as: 'stockLevels',
+          model: Lot,
+          as: 'lots',
           include: [
             {
-              model: Location,
-              as: 'location'
+              model: LotLocation,
+              as: 'lotLocations',
+              include: [
+                {
+                  model: Location,
+                  as: 'location'
+                }
+              ]
             }
           ]
         }
@@ -83,29 +95,11 @@ const getItemById = async (req, res) => {
 // Create new item
 const createItem = async (req, res) => {
   try {
-    const { name, description, stockLevels = [] } = req.body;
+    const { name, description } = req.body;
 
     // Validation
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ error: 'Item name is required' });
-    }
-
-    // Validate stock levels if provided
-    if (stockLevels.length > 0) {
-      for (const stockLevel of stockLevels) {
-        if (!stockLevel.location_id) {
-          return res.status(400).json({ error: 'Location ID is required for stock levels' });
-        }
-        if (stockLevel.minimum_quantity === undefined || stockLevel.minimum_quantity < 0) {
-          return res.status(400).json({ error: 'Minimum quantity must be a non-negative number' });
-        }
-        
-        // Verify location exists
-        const location = await Location.findByPk(stockLevel.location_id);
-        if (!location) {
-          return res.status(400).json({ error: `Location with ID ${stockLevel.location_id} not found` });
-        }
-      }
     }
 
     const item = await Item.create({
@@ -113,37 +107,29 @@ const createItem = async (req, res) => {
       description: description?.trim() || null
     });
 
-    // Create stock levels if provided
-    if (stockLevels.length > 0) {
-      const stockLevelPromises = stockLevels.map(stockLevel => 
-        StockLevel.create({
-          item_id: item.id,
-          location_id: stockLevel.location_id,
-          quantity: 0, // Initial quantity is 0
-          minimum_quantity: stockLevel.minimum_quantity
-        })
-      );
-      
-      await Promise.all(stockLevelPromises);
-    }
-
-    // Fetch the created item with its stock levels for response
-    const itemWithStockLevels = await Item.findByPk(item.id, {
+    // Fetch the created item for response
+    const createdItem = await Item.findByPk(item.id, {
       include: [
         {
-          model: StockLevel,
-          as: 'stockLevels',
+          model: Lot,
+          as: 'lots',
           include: [
             {
-              model: Location,
-              as: 'location'
+              model: LotLocation,
+              as: 'lotLocations',
+              include: [
+                {
+                  model: Location,
+                  as: 'location'
+                }
+              ]
             }
           ]
         }
       ]
     });
 
-    res.status(201).json(itemWithStockLevels);
+    res.status(201).json(createdItem);
   } catch (error) {
     console.error('Error creating item:', error);
     res.status(500).json({ error: 'Failed to create item' });
@@ -154,29 +140,11 @@ const createItem = async (req, res) => {
 const updateItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, stockLevels = [] } = req.body;
+    const { name, description } = req.body;
 
     const item = await Item.findByPk(id);
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
-    }
-
-    // Validate stock levels if provided
-    if (stockLevels.length > 0) {
-      for (const stockLevel of stockLevels) {
-        if (!stockLevel.location_id) {
-          return res.status(400).json({ error: 'Location ID is required for stock levels' });
-        }
-        if (stockLevel.minimum_quantity === undefined || stockLevel.minimum_quantity < 0) {
-          return res.status(400).json({ error: 'Minimum quantity must be a non-negative number' });
-        }
-        
-        // Verify location exists
-        const location = await Location.findByPk(stockLevel.location_id);
-        if (!location) {
-          return res.status(400).json({ error: `Location with ID ${stockLevel.location_id} not found` });
-        }
-      }
     }
 
     // Update item basic info
@@ -185,43 +153,29 @@ const updateItem = async (req, res) => {
       description: description?.trim() || item.description
     });
 
-    // Handle stock levels update if provided
-    if (stockLevels.length > 0) {
-      // Remove existing stock levels
-      await StockLevel.destroy({
-        where: { item_id: id }
-      });
-
-      // Create new stock levels
-      const stockLevelPromises = stockLevels.map(stockLevel => 
-        StockLevel.create({
-          item_id: item.id,
-          location_id: stockLevel.location_id,
-          quantity: stockLevel.quantity || 0, // Preserve existing quantity if provided, otherwise 0
-          minimum_quantity: stockLevel.minimum_quantity
-        })
-      );
-      
-      await Promise.all(stockLevelPromises);
-    }
-
-    // Fetch the updated item with its stock levels for response
-    const updatedItemWithStockLevels = await Item.findByPk(item.id, {
+    // Fetch the updated item for response
+    const updatedItem = await Item.findByPk(item.id, {
       include: [
         {
-          model: StockLevel,
-          as: 'stockLevels',
+          model: Lot,
+          as: 'lots',
           include: [
             {
-              model: Location,
-              as: 'location'
+              model: LotLocation,
+              as: 'lotLocations',
+              include: [
+                {
+                  model: Location,
+                  as: 'location'
+                }
+              ]
             }
           ]
         }
       ]
     });
 
-    res.json(updatedItemWithStockLevels);
+    res.json(updatedItem);
   } catch (error) {
     console.error('Error updating item:', error);
     res.status(500).json({ error: 'Failed to update item' });

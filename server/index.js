@@ -20,6 +20,7 @@ const supplierRoutes = require('./routes/suppliers');
 const itemRoutes = require('./routes/itemRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
+const lotRoutes = require('./routes/lots');
 
 const app = express();
 const server = createServer(app);
@@ -189,6 +190,7 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/items', itemRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/lots', lotRoutes);
 
 // Initialize database and start server
 const startServer = async () => {

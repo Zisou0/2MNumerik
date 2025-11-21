@@ -60,6 +60,12 @@ module.exports = (sequelize) => {
       foreignKey: 'supplier_id',
       as: 'orderProducts'
     });
+    
+    // Supplier has many lots
+    Supplier.hasMany(models.Lot, {
+      foreignKey: 'supplier_id',
+      as: 'lots'
+    });
   };
 
   return Supplier;

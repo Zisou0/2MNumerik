@@ -4,7 +4,6 @@ const {
   getAllTransactions,
   getTransactionById,
   createTransaction,
-  updateTransaction,
   deleteTransaction,
   validateTransaction,
   cancelTransaction
@@ -17,7 +16,6 @@ router.get('/:id', getTransactionById);
 
 // Protected routes (require authentication)
 router.post('/', authenticateToken, createTransaction);
-router.put('/:id', authenticateToken, updateTransaction);
 router.delete('/:id', authenticateToken, deleteTransaction);
 
 // Special transaction operations

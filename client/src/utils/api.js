@@ -194,6 +194,14 @@ export const clientAPI = {
   deleteClient: (id) => apiCall(`/clients/${id}`, {
     method: 'DELETE',
   }),
+
+  deactivateClient: (id) => apiCall(`/clients/${id}/deactivate`, {
+    method: 'PATCH',
+  }),
+
+  reactivateClient: (id) => apiCall(`/clients/${id}/reactivate`, {
+    method: 'PATCH',
+  }),
   
   getClientStats: () => apiCall('/clients/stats'),
   

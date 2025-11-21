@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import ItemsManagement from '../components/ItemsManagement'
 import LocationsManagement from '../components/LocationsManagement'
 import TransactionsManagement from '../components/TransactionsManagement'
+import LotsManagement from '../components/LotsManagement'
 
 const API_BASE_URL = 'http://localhost:3001/api'
 
@@ -11,34 +12,54 @@ function StockManagementPage() {
   const [totalItems, setTotalItems] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  
+  // Lot Details Modal
+  const [showLotModal, setShowLotModal] = useState(false)
+  const [lotModalData, setLotModalData] = useState(null)
+  const [lotModalLoading, setLotModalLoading] = useState(false)
 
   // Process data for table view
   const getTableData = () => {
     const allItems = new Map()
     const locations = stockData
 
-    // Collect all unique items
+    // Collect all unique items from lot locations
     locations.forEach(location => {
-      location.stockLevels?.forEach(stock => {
-        if (stock.item) {
-          allItems.set(stock.item.id, {
-            id: stock.item.id,
-            name: stock.item.name,
-            description: stock.item.description,
-            locations: {}
-          })
+      location.lotLocations?.forEach(lotLocation => {
+        if (lotLocation.lot && lotLocation.lot.item) {
+          const item = lotLocation.lot.item
+          if (!allItems.has(item.id)) {
+            allItems.set(item.id, {
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              locations: {}
+            })
+          }
         }
       })
     })
 
-    // Populate location data for each item
+    // Populate location data for each item by aggregating LOTs
     locations.forEach(location => {
-      location.stockLevels?.forEach(stock => {
-        if (stock.item && allItems.has(stock.item.id)) {
-          allItems.get(stock.item.id).locations[location.id] = {
-            quantity: stock.quantity,
-            minimum_quantity: stock.minimum_quantity,
-            isLowStock: stock.quantity > 0 && stock.quantity <= stock.minimum_quantity
+      const itemQuantities = new Map()
+      
+      // Aggregate quantities from all LOTs per item
+      location.lotLocations?.forEach(lotLocation => {
+        if (lotLocation.lot && lotLocation.lot.item) {
+          const itemId = lotLocation.lot.item.id
+          const currentQty = itemQuantities.get(itemId) || 0
+          itemQuantities.set(itemId, currentQty + (lotLocation.quantity || 0))
+        }
+      })
+      
+      // Set aggregated quantities for each item
+      itemQuantities.forEach((quantity, itemId) => {
+        if (allItems.has(itemId)) {
+          allItems.get(itemId).locations[location.id] = {
+            quantity: quantity,
+            minimum_quantity: 0,
+            isLowStock: false
           }
         }
       })
@@ -116,6 +137,63 @@ function StockManagementPage() {
     }
   }
 
+  // Fetch lot details for a specific item and location
+  const fetchLotDetails = async (itemId, locationId) => {
+    try {
+      setLotModalLoading(true)
+      setShowLotModal(true)
+      
+      console.log('Fetching lot details for:', { itemId, locationId, itemType: typeof itemId, locationIdType: typeof locationId })
+      
+      // First get item info
+      const itemResponse = await fetch(`${API_BASE_URL}/items/${itemId}`, {
+        credentials: 'include'
+      })
+      if (!itemResponse.ok) throw new Error('Failed to fetch item')
+      const itemData = await itemResponse.json()
+      
+      // Get location info 
+      const locationResponse = await fetch(`${API_BASE_URL}/locations/${locationId}`, {
+        credentials: 'include'
+      })
+      if (!locationResponse.ok) throw new Error('Failed to fetch location')
+      const locationData = await locationResponse.json()
+      
+      // Get lots for this item - note: the API returns array directly, not wrapped in object
+      const lotsResponse = await fetch(`${API_BASE_URL}/lots/item/${itemId}`, {
+        credentials: 'include'
+      })
+      if (!lotsResponse.ok) {
+        const errorText = await lotsResponse.text()
+        console.error('Lots API error:', errorText)
+        throw new Error('Failed to fetch lots')
+      }
+      const allLots = await lotsResponse.json()
+      
+      // Filter lots that are in this location and have quantity > 0
+      const relevantLots = allLots.filter(lot => 
+        lot.lotLocations?.some(lotLoc => 
+          lotLoc.location_id == locationId && lotLoc.quantity > 0  // Use == for type coercion
+        )
+      ) || []
+      
+      console.log('Debug - All lots for item:', allLots)
+      console.log('Debug - Relevant lots for location:', relevantLots)
+      console.log('Debug - Looking for location ID:', locationId, 'type:', typeof locationId)
+      
+      setLotModalData({
+        item: itemData,
+        location: locationData,
+        lots: relevantLots
+      })
+    } catch (err) {
+      console.error('Error fetching lot details:', err)
+      setError('Erreur lors du chargement des détails des lots')
+    } finally {
+      setLotModalLoading(false)
+    }
+  }
+
   // Load stock data when overview tab is active
   useEffect(() => {
     if (activeTab === 'overview') {
@@ -127,6 +205,7 @@ function StockManagementPage() {
     { id: 'overview', name: 'Vue d\'ensemble', icon: '📊' },
     { id: 'items', name: 'Articles', icon: '📦' },
     { id: 'locations', name: 'Emplacements', icon: '📍' },
+    { id: 'lots', name: 'Lots', icon: '🏷️' },
     { id: 'transactions', name: 'Transaction', icon: '📝' },
     { id: 'alerts', name: 'Alertes', icon: '⚠️' }
   ]
@@ -177,8 +256,8 @@ function StockManagementPage() {
                     <p className="text-sm font-medium text-red-600">Rupture Stock</p>
                     <p className="text-2xl font-bold text-red-900">
                       {stockData.reduce((count, location) => {
-                        const outOfStock = location.stockLevels?.filter(stock => 
-                          stock.quantity === 0
+                        const outOfStock = location.lotLocations?.filter(lotLoc => 
+                          lotLoc.quantity === 0
                         ).length || 0
                         return count + outOfStock
                       }, 0) || '--'}
@@ -196,8 +275,8 @@ function StockManagementPage() {
                     <p className="text-sm font-medium text-yellow-600">Stock Faible</p>
                     <p className="text-2xl font-bold text-yellow-900">
                       {stockData.reduce((count, location) => {
-                        const lowStock = location.stockLevels?.filter(stock => 
-                          stock.quantity > 0 && stock.quantity <= stock.minimum_quantity
+                        const lowStock = location.lotLocations?.filter(lotLoc => 
+                          lotLoc.quantity > 0 && lotLoc.minimum_quantity && lotLoc.quantity <= lotLoc.minimum_quantity
                         ).length || 0
                         return count + lowStock
                       }, 0) || '--'}
@@ -215,8 +294,8 @@ function StockManagementPage() {
                     <p className="text-sm font-medium text-purple-600">Quantité Totale</p>
                     <p className="text-2xl font-bold text-purple-900">
                       {stockData.reduce((total, location) => {
-                        const locationTotal = location.stockLevels?.reduce((sum, stock) => 
-                          sum + (stock.quantity || 0), 0
+                        const locationTotal = location.lotLocations?.reduce((sum, lotLoc) => 
+                          sum + (lotLoc.quantity || 0), 0
                         ) || 0
                         return total + locationTotal
                       }, 0) || '--'}
@@ -360,9 +439,13 @@ function StockManagementPage() {
                                       return (
                                         <td key={location.id} className="px-3 py-2.5 text-center border-r border-gray-200">
                                           {stockData ? (
-                                            <div className="flex flex-col items-center space-y-1">
+                                            <button
+                                              onClick={() => fetchLotDetails(item.id, location.id)}
+                                              className="flex flex-col items-center space-y-1 hover:bg-blue-50 p-1 rounded-lg transition-colors duration-200 w-full"
+                                              title="Cliquez pour voir les détails des lots"
+                                            >
                                               <div className={`
-                                                inline-flex items-center justify-center w-10 h-10 rounded-lg font-bold text-sm
+                                                inline-flex items-center justify-center w-10 h-10 rounded-lg font-bold text-sm transition-transform hover:scale-105
                                                 ${stockData.quantity === 0
                                                   ? 'bg-red-100 text-red-700 border border-red-300' 
                                                   : stockData.isLowStock 
@@ -375,7 +458,7 @@ function StockManagementPage() {
                                               <div className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
                                                 min: {stockData.minimum_quantity}
                                               </div>
-                                            </div>
+                                            </button>
                                           ) : (
                                             <div className="flex flex-col items-center">
                                               <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
@@ -456,6 +539,9 @@ function StockManagementPage() {
       case 'locations':
         return <LocationsManagement />
 
+      case 'lots':
+        return <LotsManagement />
+
       case 'transactions':
         return <TransactionsManagement />
 
@@ -506,6 +592,276 @@ function StockManagementPage() {
 
       {/* Tab Content */}
       {renderTabContent()}
+      
+      {/* Lot Details Modal */}
+      {showLotModal && (
+        <LotDetailsModal 
+          isOpen={showLotModal}
+          onClose={() => {
+            setShowLotModal(false)
+            setLotModalData(null)
+          }}
+          data={lotModalData}
+          loading={lotModalLoading}
+        />
+      )}
+    </div>
+  )
+}
+
+// LotDetailsModal Component
+function LotDetailsModal({ isOpen, onClose, data, loading }) {
+  if (!isOpen) return null
+
+  const getLocationIcon = (type) => {
+    const icons = {
+      'main_depot': '🏢',
+      'workshop': '🔧',
+      'store': '🏪',
+      'supplier': '🚚',
+      'customer': '👤'
+    }
+    return icons[type] || '📍'
+  }
+
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      'active': { bg: 'bg-green-100', text: 'text-green-800', label: 'Actif' },
+      'consumed': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Consommé' },
+      'expired': { bg: 'bg-red-100', text: 'text-red-800', label: 'Expiré' },
+      'quarantine': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Quarantaine' }
+    }
+    const config = statusConfig[status] || statusConfig['active']
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+        {config.label}
+      </span>
+    )
+  }
+
+  const isExpiringSoon = (expirationDate) => {
+    if (!expirationDate) return false
+    const expDate = new Date(expirationDate)
+    const today = new Date()
+    const daysDiff = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24))
+    return daysDiff <= 30 && daysDiff > 0
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-[#00AABB] to-[#008899] px-6 py-4 rounded-t-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <span className="text-white text-xl">📦</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">Détails des Lots</h2>
+                <p className="text-white/80 text-sm">
+                  {loading ? 'Chargement...' : `${data?.item?.name || ''} - ${data?.location?.name || ''}`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+            >
+              <span className="text-white text-xl">✕</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Content */}
+        <div className="p-6">
+          {loading ? (
+            <div className="flex justify-center items-center h-48">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00AABB]"></div>
+            </div>
+          ) : data ? (
+            <div className="space-y-6">
+              {/* Summary Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Item Info */}
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <span className="text-blue-600 text-xl">📦</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-900">Article</h3>
+                      <p className="text-blue-700 text-sm">{data.item?.name}</p>
+                    </div>
+                  </div>
+                  {data.item?.description && (
+                    <p className="text-blue-600 text-sm">{data.item.description}</p>
+                  )}
+                </div>
+
+                {/* Location Info */}
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <span className="text-green-600 text-xl">{getLocationIcon(data.location?.type)}</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900">Emplacement</h3>
+                      <p className="text-green-700 text-sm">{data.location?.name}</p>
+                    </div>
+                  </div>
+                  <p className="text-green-600 text-sm capitalize">{data.location?.type?.replace('_', ' ')}</p>
+                </div>
+              </div>
+
+              {/* Lots Table */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                  <span className="mr-2">🏷️</span>
+                  Lots disponibles ({data.lots?.length || 0})
+                </h3>
+
+                {data.lots && data.lots.length > 0 ? (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Numéro de Lot
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Quantité
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Fournisseur
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Dates
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Statut
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {data.lots.map(lot => {
+                          // Find the quantity for this specific location
+                          const locationQuantity = lot.lotLocations?.find(
+                            lotLoc => lotLoc.location_id == data.location.id  // Use == for type coercion
+                          )?.quantity || 0
+
+                          return (
+                            <tr key={lot.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <span className="font-medium text-gray-900">{lot.lot_number}</span>
+                                  {isExpiringSoon(lot.expiration_date) && (
+                                    <span className="ml-2 text-orange-500" title="Expiration proche">⚠️</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex items-center space-x-2">
+                                  <span className={`
+                                    inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold
+                                    ${locationQuantity === 0
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-green-100 text-green-700'
+                                    }
+                                  `}>
+                                    {locationQuantity}
+                                  </span>
+                                  <span className="text-gray-500 text-sm">/ {lot.initial_quantity}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <span className="text-sm text-gray-900">{lot.supplier?.nom || 'N/A'}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="text-sm">
+                                  {lot.manufacturing_date && (
+                                    <div className="text-gray-600">
+                                      📅 Fab: {new Date(lot.manufacturing_date).toLocaleDateString('fr-FR')}
+                                    </div>
+                                  )}
+                                  {lot.expiration_date && (
+                                    <div className={`
+                                      ${isExpiringSoon(lot.expiration_date) ? 'text-orange-600' : 'text-gray-600'}
+                                    `}>
+                                      ⏰ Exp: {new Date(lot.expiration_date).toLocaleDateString('fr-FR')}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                {getStatusBadge(lot.status)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+                    <span className="text-6xl mb-4 block">📦</span>
+                    <p className="text-gray-500 font-medium">Aucun lot trouvé</p>
+                    <p className="text-gray-400 text-sm mt-2">
+                      Aucun lot disponible pour cet article dans cet emplacement
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Summary Stats */}
+              {data.lots && data.lots.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {data.lots.reduce((total, lot) => {
+                        const qty = lot.lotLocations?.find(
+                          lotLoc => lotLoc.location_id == data.location.id  // Use == for type coercion
+                        )?.quantity || 0
+                        return total + qty
+                      }, 0)}
+                    </div>
+                    <div className="text-sm text-gray-500">Quantité totale</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {data.lots.filter(lot => lot.status === 'active').length}
+                    </div>
+                    <div className="text-sm text-gray-500">Lots actifs</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {data.lots.filter(lot => isExpiringSoon(lot.expiration_date)).length}
+                    </div>
+                    <div className="text-sm text-gray-500">Expirent bientôt</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <span className="text-6xl mb-4 block">❌</span>
+              <p className="text-gray-500">Erreur lors du chargement des données</p>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="bg-gray-50 px-6 py-4 rounded-b-xl border-t border-gray-200">
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

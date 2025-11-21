@@ -123,6 +123,28 @@ const ClientsPage = () => {
     setShowDeleteDialog(true);
   };
 
+  const handleDeactivateClient = async (clientId) => {
+    try {
+      await clientAPI.deactivateClient(clientId);
+      fetchClients(pagination.currentPage);
+      fetchStats();
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || 'Erreur lors de la désactivation';
+      setError(errorMessage);
+    }
+  };
+
+  const handleReactivateClient = async (clientId) => {
+    try {
+      await clientAPI.reactivateClient(clientId);
+      fetchClients(pagination.currentPage);
+      fetchStats();
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || 'Erreur lors de la réactivation';
+      setError(errorMessage);
+    }
+  };
+
   const confirmDeleteClient = async () => {
     if (clientToDelete) {
       try {
@@ -132,7 +154,8 @@ const ClientsPage = () => {
         setShowDeleteDialog(false);
         setClientToDelete(null);
       } catch (err) {
-        setError('Erreur lors de la suppression');
+        const errorMessage = err.response?.data?.message || 'Erreur lors de la suppression';
+        setError(errorMessage);
         setShowDeleteDialog(false);
         setClientToDelete(null);
       }
@@ -539,15 +562,40 @@ const ClientsPage = () => {
                   </svg>
                   Modifier
                 </button>
-                <button
-                  onClick={() => handleDeleteClient(client.id)}
-                  className="flex-1 flex items-center justify-center gap-2 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Supprimer
-                </button>
+                {client.actif ? (
+                  client.orders && client.orders.length > 0 ? (
+                    <button
+                      onClick={() => handleDeactivateClient(client.id)}
+                      className="flex-1 flex items-center justify-center gap-2 text-orange-600 hover:text-orange-900 bg-orange-100 hover:bg-orange-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                      title={`Ce client a ${client.orders.length} commande(s)`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      Désactiver
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleDeleteClient(client.id)}
+                      className="flex-1 flex items-center justify-center gap-2 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Supprimer
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={() => handleReactivateClient(client.id)}
+                    className="flex-1 flex items-center justify-center gap-2 text-green-600 hover:text-green-900 bg-green-100 hover:bg-green-200 px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Réactiver
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -670,15 +718,40 @@ const ClientsPage = () => {
                         </svg>
                         Modifier
                       </button>
-                      <button
-                        onClick={() => handleDeleteClient(client.id)}
-                        className="inline-flex items-center gap-1 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        Supprimer
-                      </button>
+                      {client.actif ? (
+                        client.orders && client.orders.length > 0 ? (
+                          <button
+                            onClick={() => handleDeactivateClient(client.id)}
+                            className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-900 bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                            title={`Ce client a ${client.orders.length} commande(s)`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                            Désactiver
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleDeleteClient(client.id)}
+                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-900 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Supprimer
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          onClick={() => handleReactivateClient(client.id)}
+                          className="inline-flex items-center gap-1 text-green-600 hover:text-green-900 bg-green-100 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Réactiver
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

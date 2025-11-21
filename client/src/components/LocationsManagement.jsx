@@ -323,6 +323,9 @@ function LocationsManagement() {
                   Type
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stock (Lots)
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date de création
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -340,6 +343,20 @@ function LocationsManagement() {
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeBadgeColor(location.type)}`}>
                       {getTypeLabel(location.type)}
                     </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    {location.lotLocations && location.lotLocations.length > 0 ? (
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">
+                          {location.lotLocations.length} lot{location.lotLocations.length !== 1 ? 's' : ''}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {location.lotLocations.reduce((sum, ll) => sum + ll.quantity, 0)} unités
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400 italic">Aucun stock</span>
+                    )}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-700">
