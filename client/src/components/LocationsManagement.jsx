@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react'
 import AlertDialog from './AlertDialog'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `http://${window.location.hostname}:3001/api`
+  }
+  return 'http://localhost:3001/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 function LocationsManagement() {
   const [locations, setLocations] = useState([])
