@@ -4,7 +4,7 @@ import LocationsManagement from '../components/LocationsManagement'
 import TransactionsManagement from '../components/TransactionsManagement'
 import LotsManagement from '../components/LotsManagement'
 
-const API_BASE_URL = 'http://localhost:3001/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL
 
 function StockManagementPage() {
   const [activeTab, setActiveTab] = useState('overview')
