@@ -3,23 +3,7 @@ import ItemsManagement from '../components/ItemsManagement'
 import LocationsManagement from '../components/LocationsManagement'
 import TransactionsManagement from '../components/TransactionsManagement'
 import LotsManagement from '../components/LotsManagement'
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    console.log('[DEBUG] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
-    return import.meta.env.VITE_API_URL
-  }
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const url = `http://${window.location.hostname}:3001/api`
-    console.log('[DEBUG] Using hostname detection:', url)
-    return url
-  }
-  console.log('[DEBUG] Using localhost default')
-  return 'http://localhost:3001/api'
-}
-
-const API_BASE_URL = getApiBaseUrl()
-console.log('[DEBUG] StockManagementPage - Final API_BASE_URL:', API_BASE_URL)
+import { stockAPI } from '../utils/api'
 
 function StockManagementPage() {
   const [activeTab, setActiveTab] = useState('overview')
@@ -113,12 +97,7 @@ function StockManagementPage() {
   // Fetch total items count
   const fetchTotalItems = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/items?page=1&limit=1`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch total items count')
-      }
-
-      const data = await response.json()
+      const data = await stockAPI.getItems({ page: 1, limit: 1 })
       setTotalItems(data.totalCount || 0)
     } catch (err) {
       console.error('Error fetching total items:', err)
@@ -133,17 +112,10 @@ function StockManagementPage() {
       setError(null)
       
       // Fetch locations with their stock levels and total items count
-      const [locationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/locations`),
+      await Promise.all([
+        stockAPI.getLocations().then(data => setStockData(data.locations || [])),
         fetchTotalItems()
       ])
-      
-      if (!locationsResponse.ok) {
-        throw new Error('Failed to fetch stock data')
-      }
-
-      const locationsData = await locationsResponse.json()
-      setStockData(locationsData.locations || [])
     } catch (err) {
       setError(err.message)
       console.error('Error fetching stock overview:', err)
@@ -161,29 +133,13 @@ function StockManagementPage() {
       console.log('Fetching lot details for:', { itemId, locationId, itemType: typeof itemId, locationIdType: typeof locationId })
       
       // First get item info
-      const itemResponse = await fetch(`${API_BASE_URL}/items/${itemId}`, {
-        credentials: 'include'
-      })
-      if (!itemResponse.ok) throw new Error('Failed to fetch item')
-      const itemData = await itemResponse.json()
+      const itemData = await stockAPI.getItem(itemId)
       
       // Get location info 
-      const locationResponse = await fetch(`${API_BASE_URL}/locations/${locationId}`, {
-        credentials: 'include'
-      })
-      if (!locationResponse.ok) throw new Error('Failed to fetch location')
-      const locationData = await locationResponse.json()
+      const locationData = await stockAPI.getLocation(locationId)
       
       // Get lots for this item - note: the API returns array directly, not wrapped in object
-      const lotsResponse = await fetch(`${API_BASE_URL}/lots/item/${itemId}`, {
-        credentials: 'include'
-      })
-      if (!lotsResponse.ok) {
-        const errorText = await lotsResponse.text()
-        console.error('Lots API error:', errorText)
-        throw new Error('Failed to fetch lots')
-      }
-      const allLots = await lotsResponse.json()
+      const allLots = await stockAPI.getLotsForItem(itemId)
       
       // Filter lots that are in this location and have quantity > 0
       const relevantLots = allLots.filter(lot => 

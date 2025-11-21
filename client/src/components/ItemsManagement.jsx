@@ -1,22 +1,6 @@
 import { useState, useEffect } from 'react'
 import AlertDialog from './AlertDialog'
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    console.log('[DEBUG] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
-    return import.meta.env.VITE_API_URL
-  }
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const url = `http://${window.location.hostname}:3001/api`
-    console.log('[DEBUG] Using hostname detection:', url)
-    return url
-  }
-  console.log('[DEBUG] Using localhost default')
-  return 'http://localhost:3001/api'
-}
-
-const API_BASE_URL = getApiBaseUrl()
-console.log('[DEBUG] ItemsManagement - Final API_BASE_URL:', API_BASE_URL)
+import { stockAPI } from '../utils/api'
 
 function ItemsManagement() {
   const [items, setItems] = useState([])
@@ -120,21 +104,16 @@ function ItemsManagement() {
   const fetchItems = async (page = currentPage, search = searchTerm) => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
+      const params = {
         page: page.toString(),
-        limit: '10', // Hardcoded to 10
+        limit: '10',
         sortBy,
         sortOrder,
         ...(search && { search })
-      })
-      
-      const response = await fetch(`${API_BASE_URL}/items?${params}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch items')
       }
-
-      const data = await response.json()
-      console.log('API Response:', data) // Debug log
+      
+      const data = await stockAPI.getItems(params)
+      console.log('API Response:', data)
       setItems(data.items)
       setTotalItems(data.totalCount) // Backend uses 'totalCount', not 'totalItems'
       setTotalPages(data.totalPages)
@@ -149,13 +128,7 @@ function ItemsManagement() {
   // Fetch locations from API
   const fetchLocations = async () => {
     try {
-      console.log('Fetching locations from:', `${API_BASE_URL}/locations`)
-      const response = await fetch(`${API_BASE_URL}/locations`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch locations')
-      }
-
-      const data = await response.json()
+      const data = await stockAPI.getLocations()
       console.log('Locations API Response:', data)
       setLocations(data.locations || [])
     } catch (err) {
@@ -167,11 +140,7 @@ function ItemsManagement() {
   // Fetch lots from API
   const fetchLots = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/lots?status=active&limit=1000`, {
-        credentials: 'include'
-      })
-      if (!response.ok) throw new Error('Failed to fetch lots')
-      const data = await response.json()
+      const data = await stockAPI.getLots({ status: 'active', limit: 1000 })
       setLots(data.lots || [])
     } catch (err) {
       console.error('Error fetching lots:', err)
@@ -198,25 +167,18 @@ function ItemsManagement() {
       setShowItemDetailsModal(true)
       
       // Fetch item details
-      const itemResponse = await fetch(`${API_BASE_URL}/items/${itemId}`, {
-        credentials: 'include'
-      })
-      if (!itemResponse.ok) throw new Error('Failed to fetch item details')
-      const itemData = await itemResponse.json()
+      const itemData = await stockAPI.getItem(itemId)
       
       // Fetch lots for this item
-      const lotsResponse = await fetch(`${API_BASE_URL}/lots/item/${itemId}?limit=1000`, {
-        credentials: 'include'
-      })
-      if (!lotsResponse.ok) throw new Error('Failed to fetch lots')
-      const itemLots = await lotsResponse.json()
+      const itemLots = await stockAPI.getLotsForItem(itemId)
       
       // Fetch transactions for this item
-      const transactionsResponse = await fetch(`${API_BASE_URL}/transactions?item_id=${itemId}&limit=50&sortBy=created_at&sortOrder=DESC`, {
-        credentials: 'include'
+      const transactionsData = await stockAPI.getTransactions({ 
+        item_id: itemId, 
+        limit: 50, 
+        sortBy: 'created_at', 
+        sortOrder: 'DESC' 
       })
-      if (!transactionsResponse.ok) throw new Error('Failed to fetch transactions')
-      const transactionsData = await transactionsResponse.json()
       
       // Process location data from lots
       const locationMap = new Map()
@@ -268,25 +230,11 @@ function ItemsManagement() {
   // Create new item
   const createItem = async () => {
     try {
-      // Items are created without stock - stock comes from IN transactions with LOTs
       const requestBody = {
         ...formData
       }
 
-      const response = await fetch(`${API_BASE_URL}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include', // Include cookies
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to create item')
-      }
-
+      await stockAPI.createItem(requestBody)
       await fetchItems()
       closeModal()
     } catch (err) {
@@ -297,25 +245,11 @@ function ItemsManagement() {
   // Update item
   const updateItem = async () => {
     try {
-      // Items are updated without stock - stock comes from transactions with LOTs
       const requestBody = {
         ...formData
       }
 
-      const response = await fetch(`${API_BASE_URL}/items/${selectedItem.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include', // Include cookies
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to update item')
-      }
-
+      await stockAPI.updateItem(selectedItem.id, requestBody)
       await fetchItems()
       closeModal()
     } catch (err) {
@@ -332,16 +266,7 @@ function ItemsManagement() {
     if (!deleteConfirm) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/items/${deleteConfirm.id}`, {
-        method: 'DELETE',
-        credentials: 'include' // Include cookies
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to delete item')
-      }
-
+      await stockAPI.deleteItem(deleteConfirm.id)
       await fetchItems()
       setDeleteConfirm(null)
     } catch (err) {

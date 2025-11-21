@@ -1,22 +1,6 @@
 import { useState, useEffect } from 'react'
 import AlertDialog from './AlertDialog'
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    console.log('[DEBUG] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
-    return import.meta.env.VITE_API_URL
-  }
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const url = `http://${window.location.hostname}:3001/api`
-    console.log('[DEBUG] Using hostname detection:', url)
-    return url
-  }
-  console.log('[DEBUG] Using localhost default')
-  return 'http://localhost:3001/api'
-}
-
-const API_BASE_URL = getApiBaseUrl()
-console.log('[DEBUG] TransactionsManagement - Final API_BASE_URL:', API_BASE_URL)
+import { stockAPI, supplierAPI } from '../utils/api'
 
 function TransactionsManagement() {
   const [transactions, setTransactions] = useState([])
@@ -115,7 +99,7 @@ function TransactionsManagement() {
   const fetchTransactions = async (page = currentPage, search = searchTerm) => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
+      const params = {
         page: page.toString(),
         limit: '10',
         sortBy,
@@ -123,14 +107,9 @@ function TransactionsManagement() {
         ...(search && { search }),
         ...(filterType && { type: filterType }),
         ...(filterStatus && { status: filterStatus })
-      })
-      
-      const response = await fetch(`${API_BASE_URL}/transactions?${params}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch transactions')
       }
-
-      const data = await response.json()
+      
+      const data = await stockAPI.getTransactions(params)
       setTransactions(data.transactions)
       setTotalTransactions(data.totalCount)
       setTotalPages(data.totalPages)
@@ -142,15 +121,10 @@ function TransactionsManagement() {
     }
   }
 
-  // Fetch items for dropdown - only items with assigned emplacements
+  // Fetch items for dropdown
   const fetchItems = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/items?limit=1000`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch items')
-      }
-      const data = await response.json()
-      // Show all items (no filtering by stock/lots for transaction creation)
+      const data = await stockAPI.getItems({ limit: 1000 })
       setItems(data.items || [])
     } catch (err) {
       console.error('Error fetching items:', err)
@@ -160,11 +134,7 @@ function TransactionsManagement() {
   // Fetch locations for dropdown
   const fetchLocations = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/locations`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch locations')
-      }
-      const data = await response.json()
+      const data = await stockAPI.getLocations()
       setLocations(data.locations || [])
     } catch (err) {
       console.error('Error fetching locations:', err)
@@ -174,14 +144,8 @@ function TransactionsManagement() {
   // Fetch suppliers for dropdown
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/suppliers`, {
-        credentials: 'include'
-      })
-      if (!response.ok) {
-        throw new Error('Failed to fetch suppliers')
-      }
-      const data = await response.json()
-      console.log('Suppliers fetched:', data) // Debug log
+      const data = await supplierAPI.getSuppliers()
+      console.log('Suppliers fetched:', data)
       setSuppliers(data.suppliers || [])
     } catch (err) {
       console.error('Error fetching suppliers:', err)
@@ -191,11 +155,7 @@ function TransactionsManagement() {
   // Fetch lots for dropdown
   const fetchLots = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/lots?status=active&limit=1000`, {
-        credentials: 'include'
-      })
-      if (!response.ok) throw new Error('Failed to fetch lots')
-      const data = await response.json()
+      const data = await stockAPI.getLots({ status: 'active', limit: 1000 })
       setLots(data.lots || [])
     } catch (err) {
       console.error('Error fetching lots:', err)
@@ -230,15 +190,7 @@ function TransactionsManagement() {
   // Fetch lots available at a specific location
   const fetchLotsAtLocation = async (locationId, itemLots) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/locations/${locationId}`, {
-        credentials: 'include'
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch location details: ${response.status}`)
-      }
-      
-      const data = await response.json()
+      const data = await stockAPI.getLocation(locationId)
       
       // Get lotLocations from the direct response (not nested under location)
       const lotLocations = data.lotLocations || []
@@ -278,33 +230,18 @@ function TransactionsManagement() {
         payload.supplier_id = parseInt(formData.supplier_id)
       }
 
-      const response = await fetch(`${API_BASE_URL}/transactions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        
-        // Check if it's a stock insufficiency error
-        if (errorData.type === 'INSUFFICIENT_STOCK') {
-          setStockErrorDialog({
-            title: "Stock Insuffisant",
-            message: errorData.error
-          })
-          return
-        }
-        
-        throw new Error(errorData.error || 'Failed to create transaction')
-      }
-
+      await stockAPI.createTransaction(payload)
       await fetchTransactions()
       closeModal()
     } catch (err) {
+      // Check if it's a stock insufficiency error
+      if (err.message.includes('INSUFFICIENT_STOCK')) {
+        setStockErrorDialog({
+          title: "Stock Insuffisant",
+          message: err.message
+        })
+        return
+      }
       setError(err.message)
     }
   }
@@ -324,33 +261,18 @@ function TransactionsManagement() {
       // Add LOT data
       if (formData.lot_id) payload.lot_id = parseInt(formData.lot_id)
 
-      const response = await fetch(`${API_BASE_URL}/transactions/${selectedTransaction.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        
-        // Check if it's a stock insufficiency error
-        if (errorData.type === 'INSUFFICIENT_STOCK') {
-          setStockErrorDialog({
-            title: "Stock Insuffisant",
-            message: errorData.error
-          })
-          return
-        }
-        
-        throw new Error(errorData.error || 'Failed to update transaction')
-      }
-
+      await stockAPI.updateTransaction(selectedTransaction.id, payload)
       await fetchTransactions()
       closeModal()
     } catch (err) {
+      // Check if it's a stock insufficiency error
+      if (err.message.includes('INSUFFICIENT_STOCK')) {
+        setStockErrorDialog({
+          title: "Stock Insuffisant",
+          message: err.message
+        })
+        return
+      }
       setError(err.message)
     }
   }
@@ -365,36 +287,21 @@ function TransactionsManagement() {
     if (!validateConfirm || !validatorName.trim()) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/transactions/${validateConfirm.id}/validate`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ validated_by: validatorName.trim() })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        
-        // Check if it's a stock insufficiency error
-        if (errorData.type === 'INSUFFICIENT_STOCK') {
-          setStockErrorDialog({
-            title: "Stock Insuffisant",
-            message: errorData.error
-          })
-          setValidateConfirm(null)
-          setValidatorName('')
-          return
-        }
-        
-        throw new Error(errorData.error || 'Failed to validate transaction')
-      }
-
+      await stockAPI.validateTransaction(validateConfirm.id)
       await fetchTransactions()
       setValidateConfirm(null)
       setValidatorName('')
     } catch (err) {
+      // Check if it's a stock insufficiency error
+      if (err.message.includes('INSUFFICIENT_STOCK')) {
+        setStockErrorDialog({
+          title: "Stock Insuffisant",
+          message: err.message
+        })
+        setValidateConfirm(null)
+        setValidatorName('')
+        return
+      }
       setError(err.message)
       setValidateConfirm(null)
       setValidatorName('')
@@ -404,16 +311,7 @@ function TransactionsManagement() {
   // Cancel transaction
   const cancelTransaction = async (transactionId) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/transactions/${transactionId}/cancel`, {
-        method: 'PATCH',
-        credentials: 'include'
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to cancel transaction')
-      }
-
+      await stockAPI.cancelTransaction(transactionId)
       await fetchTransactions()
     } catch (err) {
       setError(err.message)
@@ -429,16 +327,7 @@ function TransactionsManagement() {
     if (!deleteConfirm) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/transactions/${deleteConfirm.id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete transaction')
-      }
-
+      await stockAPI.deleteTransaction(deleteConfirm.id)
       await fetchTransactions()
       setDeleteConfirm(null)
     } catch (err) {

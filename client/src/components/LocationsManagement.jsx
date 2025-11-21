@@ -1,22 +1,6 @@
 import { useState, useEffect } from 'react'
 import AlertDialog from './AlertDialog'
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    console.log('[DEBUG] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
-    return import.meta.env.VITE_API_URL
-  }
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const url = `http://${window.location.hostname}:3001/api`
-    console.log('[DEBUG] Using hostname detection:', url)
-    return url
-  }
-  console.log('[DEBUG] Using localhost default')
-  return 'http://localhost:3001/api'
-}
-
-const API_BASE_URL = getApiBaseUrl()
-console.log('[DEBUG] LocationsManagement - Final API_BASE_URL:', API_BASE_URL)
+import { stockAPI } from '../utils/api'
 
 function LocationsManagement() {
   const [locations, setLocations] = useState([])
@@ -71,11 +55,7 @@ function LocationsManagement() {
   // Fetch location types
   const fetchLocationTypes = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/locations/types`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch location types')
-      }
-      const types = await response.json()
+      const types = await stockAPI.getLocationTypes()
       setLocationTypes(types)
     } catch (err) {
       setError(err.message)
@@ -86,21 +66,16 @@ function LocationsManagement() {
   const fetchLocations = async (page = currentPage, search = searchTerm, type = typeFilter) => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
+      const params = {
         page: page.toString(),
-        limit: '10', // Hardcoded to 10
+        limit: '10',
         sortBy,
         sortOrder,
         ...(search && { search }),
         ...(type && { type })
-      })
-      
-      const response = await fetch(`${API_BASE_URL}/locations?${params}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch locations')
       }
-
-      const data = await response.json()
+      
+      const data = await stockAPI.getLocations(params)
       setLocations(data.locations)
       setTotalLocations(data.totalCount)
       setTotalPages(data.totalPages)
@@ -115,20 +90,7 @@ function LocationsManagement() {
   // Create new location
   const createLocation = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/locations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include', // Include cookies
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create location')
-      }
-
+      await stockAPI.createLocation(formData)
       await fetchLocations()
       closeModal()
     } catch (err) {
@@ -139,20 +101,7 @@ function LocationsManagement() {
   // Update location
   const updateLocation = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/locations/${selectedLocation.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include', // Include cookies
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update location')
-      }
-
+      await stockAPI.updateLocation(selectedLocation.id, formData)
       await fetchLocations()
       closeModal()
     } catch (err) {
@@ -169,16 +118,7 @@ function LocationsManagement() {
     if (!deleteConfirm) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/locations/${deleteConfirm.id}`, {
-        method: 'DELETE',
-        credentials: 'include' // Include cookies
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete location')
-      }
-
+      await stockAPI.deleteLocation(deleteConfirm.id)
       await fetchLocations()
       setDeleteConfirm(null)
     } catch (err) {

@@ -493,4 +493,146 @@ export const supplierAPI = {
   }),
 }
 
-export default { apiCall, authAPI, userAPI, orderAPI, productAPI, clientAPI, finitionAPI, statisticsAPI, exportAPI, atelierTaskAPI, supplierAPI }
+// Stock Management API calls
+export const stockAPI = {
+  // Items
+  getItems: (params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/items${queryString ? '?' + queryString : ''}`);
+  },
+  
+  getItem: (id) => apiCall(`/items/${id}`),
+  
+  createItem: (itemData) => apiCall('/items', {
+    method: 'POST',
+    body: JSON.stringify(itemData),
+  }),
+  
+  updateItem: (id, itemData) => apiCall(`/items/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(itemData),
+  }),
+  
+  deleteItem: (id) => apiCall(`/items/${id}`, {
+    method: 'DELETE',
+  }),
+
+  // Locations
+  getLocations: (params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/locations${queryString ? '?' + queryString : ''}`);
+  },
+  
+  getLocation: (id) => apiCall(`/locations/${id}`),
+  
+  getLocationTypes: () => apiCall(`/locations/types`),
+  
+  createLocation: (locationData) => apiCall('/locations', {
+    method: 'POST',
+    body: JSON.stringify(locationData),
+  }),
+  
+  updateLocation: (id, locationData) => apiCall(`/locations/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(locationData),
+  }),
+  
+  deleteLocation: (id) => apiCall(`/locations/${id}`, {
+    method: 'DELETE',
+  }),
+
+  // Lots
+  getLots: (params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/lots${queryString ? '?' + queryString : ''}`);
+  },
+  
+  getLot: (id) => apiCall(`/lots/${id}`),
+  
+  createLot: (lotData) => apiCall('/lots', {
+    method: 'POST',
+    body: JSON.stringify(lotData),
+  }),
+  
+  updateLot: (id, lotData) => apiCall(`/lots/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(lotData),
+  }),
+  
+  deleteLot: (id) => apiCall(`/lots/${id}`, {
+    method: 'DELETE',
+  }),
+
+  getLotsForItem: (itemId) => apiCall(`/lots/item/${itemId}`),
+
+  getExpiringLots: (params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/lots/expiring-soon${queryString ? '?' + queryString : ''}`);
+  },
+
+  getLotDocument: async (lotId, type = 'full') => {
+    const url = `${API_BASE_URL}/lots/${lotId}/document?type=${type}`
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    })
+    if (!response.ok) {
+      throw new Error('Failed to fetch lot document')
+    }
+    return response.blob()
+  },
+
+  // Transactions
+  getTransactions: (params = {}) => {
+    const queryString = Object.keys(params)
+      .filter(key => params[key] !== '' && params[key] !== null && params[key] !== undefined)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    return apiCall(`/transactions${queryString ? '?' + queryString : ''}`);
+  },
+  
+  getTransaction: (id) => apiCall(`/transactions/${id}`),
+  
+  createTransaction: (transactionData) => apiCall('/transactions', {
+    method: 'POST',
+    body: JSON.stringify(transactionData),
+  }),
+  
+  updateTransaction: (id, transactionData) => apiCall(`/transactions/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(transactionData),
+  }),
+  
+  deleteTransaction: (id) => apiCall(`/transactions/${id}`, {
+    method: 'DELETE',
+  }),
+
+  validateTransaction: (id) => apiCall(`/transactions/${id}/validate`, {
+    method: 'POST',
+  }),
+
+  cancelTransaction: (id) => apiCall(`/transactions/${id}/cancel`, {
+    method: 'POST',
+  }),
+}
+
+export default { apiCall, authAPI, userAPI, orderAPI, productAPI, clientAPI, finitionAPI, statisticsAPI, exportAPI, atelierTaskAPI, supplierAPI, stockAPI }

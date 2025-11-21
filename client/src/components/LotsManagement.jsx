@@ -1,22 +1,6 @@
 import { useState, useEffect } from 'react'
 import AlertDialog from './AlertDialog'
-
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    console.log('[DEBUG] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
-    return import.meta.env.VITE_API_URL
-  }
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const url = `http://${window.location.hostname}:3001/api`
-    console.log('[DEBUG] Using hostname detection:', url)
-    return url
-  }
-  console.log('[DEBUG] Using localhost default')
-  return 'http://localhost:3001/api'
-}
-
-const API_BASE_URL = getApiBaseUrl()
-console.log('[DEBUG] LotsManagement - Final API_BASE_URL:', API_BASE_URL)
+import { stockAPI, supplierAPI } from '../utils/api'
 
 function LotsManagement() {
   const [lots, setLots] = useState([])
@@ -57,26 +41,19 @@ function LotsManagement() {
       setLoading(true)
       setError(null)
 
-      const params = new URLSearchParams({
+      const params = {
         page: currentPage,
         limit: lotsPerPage
-      })
+      }
 
-      if (filterStatus !== 'all') params.append('status', filterStatus)
-      if (filterItem !== 'all') params.append('item_id', filterItem)
-      if (searchTerm) params.append('search', searchTerm)
+      if (filterStatus !== 'all') params.status = filterStatus
+      if (filterItem !== 'all') params.item_id = filterItem
+      if (searchTerm) params.search = searchTerm
 
-      const endpoint = showExpiringOnly 
-        ? `${API_BASE_URL}/lots/expiring-soon?${params.toString()}`
-        : `${API_BASE_URL}/lots?${params.toString()}`
+      const data = showExpiringOnly 
+        ? await stockAPI.getExpiringLots(params)
+        : await stockAPI.getLots(params)
 
-      const response = await fetch(endpoint, {
-        credentials: 'include'
-      })
-
-      if (!response.ok) throw new Error('Failed to fetch lots')
-
-      const data = await response.json()
       setLots(data.lots || [])
       setTotalPages(data.totalPages || 1)
       setTotalCount(data.totalCount || 0)
@@ -91,11 +68,7 @@ function LotsManagement() {
   // Fetch items for dropdown
   const fetchItems = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/items?limit=1000`, {
-        credentials: 'include'
-      })
-      if (!response.ok) throw new Error('Failed to fetch items')
-      const data = await response.json()
+      const data = await stockAPI.getItems({ limit: 1000 })
       setItems(data.items || [])
     } catch (err) {
       console.error('Error fetching items:', err)
@@ -105,11 +78,7 @@ function LotsManagement() {
   // Fetch suppliers for dropdown
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/suppliers`, {
-        credentials: 'include'
-      })
-      if (!response.ok) throw new Error('Failed to fetch suppliers')
-      const data = await response.json()
+      const data = await supplierAPI.getSuppliers()
       setSuppliers(data.suppliers || [])
     } catch (err) {
       console.error('Error fetching suppliers:', err)
@@ -169,22 +138,10 @@ function LotsManagement() {
     e.preventDefault()
     
     try {
-      const endpoint = modalMode === 'create'
-        ? `${API_BASE_URL}/lots`
-        : `${API_BASE_URL}/lots/${selectedLot.id}`
-
-      const method = modalMode === 'create' ? 'POST' : 'PUT'
-
-      const response = await fetch(endpoint, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to save lot')
+      if (modalMode === 'create') {
+        await stockAPI.createLot(formData)
+      } else {
+        await stockAPI.updateLot(selectedLot.id, formData)
       }
 
       setShowModal(false)
@@ -197,16 +154,7 @@ function LotsManagement() {
   // Delete lot
   const handleDelete = async (id) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/lots/${id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete lot')
-      }
-
+      await stockAPI.deleteLot(id)
       setDeleteConfirm(null)
       fetchLots()
     } catch (err) {
@@ -217,14 +165,7 @@ function LotsManagement() {
   // Print PDF document
   const handlePrintPDF = async (lot, type = 'full') => {
     try {
-      const response = await fetch(`${API_BASE_URL}/lots/${lot.id}/document?type=${type}`, {
-        credentials: 'include'
-      })
-
-      if (!response.ok) throw new Error('Failed to generate PDF document')
-
-      // Get the PDF blob
-      const blob = await response.blob()
+      const blob = await stockAPI.getLotDocument(lot.id, type)
       
       // Create a URL for the blob and trigger download
       const url = window.URL.createObjectURL(blob)
