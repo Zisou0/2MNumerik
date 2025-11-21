@@ -3,15 +3,20 @@ import AlertDialog from './AlertDialog'
 
 const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
+    console.log('[DEBUG] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
     return import.meta.env.VITE_API_URL
   }
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return `http://${window.location.hostname}:3001/api`
+    const url = `http://${window.location.hostname}:3001/api`
+    console.log('[DEBUG] Using hostname detection:', url)
+    return url
   }
+  console.log('[DEBUG] Using localhost default')
   return 'http://localhost:3001/api'
 }
 
 const API_BASE_URL = getApiBaseUrl()
+console.log('[DEBUG] LotsManagement - Final API_BASE_URL:', API_BASE_URL)
 
 function LotsManagement() {
   const [lots, setLots] = useState([])
