@@ -626,12 +626,13 @@ export const stockAPI = {
     method: 'DELETE',
   }),
 
-  validateTransaction: (id) => apiCall(`/transactions/${id}/validate`, {
-    method: 'POST',
+  validateTransaction: (id, validated_by) => apiCall(`/transactions/${id}/validate`, {
+    method: 'PATCH',
+    body: JSON.stringify({ validated_by }),
   }),
 
   cancelTransaction: (id) => apiCall(`/transactions/${id}/cancel`, {
-    method: 'POST',
+    method: 'PATCH',
   }),
 }
 

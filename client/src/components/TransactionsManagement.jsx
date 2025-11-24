@@ -287,7 +287,7 @@ function TransactionsManagement() {
     if (!validateConfirm || !validatorName.trim()) return
 
     try {
-      await stockAPI.validateTransaction(validateConfirm.id)
+      await stockAPI.validateTransaction(validateConfirm.id, validatorName)
       await fetchTransactions()
       setValidateConfirm(null)
       setValidatorName('')
