@@ -42,6 +42,11 @@ const io = new Server(server, {
         return callback(null, true);
       }
       
+      // Allow Tailscale VPN (100.x.x.x)
+      if (origin.match(/^https?:\/\/100\.\d+\.\d+\.\d+(:\d+)?$/)) {
+        return callback(null, true);
+      }
+      
       // Allow your specific ngrok URLs
       const allowedNgrokOrigins = [
         'https://6a76-105-102-7-60.ngrok-free.app',
@@ -151,6 +156,11 @@ app.use(cors({
     
     // Allow your local network (192.168.x.x, 10.x.x.x, 172.16.x.x-172.31.x.x)
     if (origin.match(/^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/)) {
+      return callback(null, true);
+    }
+    
+    // Allow Tailscale VPN (100.x.x.x)
+    if (origin.match(/^https?:\/\/100\.\d+\.\d+\.\d+(:\d+)?$/)) {
       return callback(null, true);
     }
     
