@@ -32,16 +32,21 @@ export const WebSocketProvider = ({ children }) => {
 
       try {
         console.log('WebSocket: Attempting to connect for user:', user.username);
+        console.log('Current hostname:', window.location.hostname);
+        console.log('Current full URL:', window.location.href);
         
         // Dynamic API URL that works with Tailscale VPN
         let apiUrl;
         if (import.meta.env.VITE_API_URL) {
           apiUrl = import.meta.env.VITE_API_URL;
+          console.log('Using VITE_API_URL from env');
         } else if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
           // Use the same hostname as the frontend (works for Tailscale and local network)
           apiUrl = `http://${window.location.hostname}:3001`;
+          console.log('Using dynamic hostname');
         } else {
           apiUrl = 'http://localhost:3001';
+          console.log('Using localhost');
         }
         
         console.log('WebSocket: Connecting to:', apiUrl);
