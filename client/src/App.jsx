@@ -116,7 +116,7 @@ function AppRoutes() {
         <Route 
           path="stock" 
           element={
-            <ProtectedRoute allowedRoles={['admin', 'manager']}>
+            <ProtectedRoute allowedRoles={['admin', 'atelier']}>
               <StockManagementPage />
             </ProtectedRoute>
           } 

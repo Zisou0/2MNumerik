@@ -377,7 +377,7 @@ function Layout({ onLogout }) {
                   </Link>
                 </li>
               )}
-              {(user?.role === 'admin' || user?.role === 'manager') && (
+              {(user?.role === 'admin' || user?.role === 'atelier') && (
                 <li>
                   <Link to="/stock" className={`flex items-center px-2 py-2 rounded ${sidebarCollapsed ? 'md:justify-center' : ''} ${
                     isActive('/stock') 
