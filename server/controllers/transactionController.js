@@ -150,17 +150,9 @@ const getTransactionById = async (req, res) => {
 
 // Create new transaction (handles LOT-based inventory)
 const createTransaction = async (req, res) => {
-  const startTime = Date.now();
-  const requestId = `TRX-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  console.log(`[${requestId}] Creating transaction - START`);
+  const t = await sequelize.transaction();
   
-  let t;
   try {
-    console.log(`[${requestId}] Acquiring database transaction...`);
-    const txStartTime = Date.now();
-    t = await sequelize.transaction();
-    console.log(`[${requestId}] Transaction acquired in ${Date.now() - txStartTime}ms`);
-    
     const {
       item_id,
       lot_id,
@@ -178,8 +170,6 @@ const createTransaction = async (req, res) => {
       use_custom_lot_number = false,
       lot_notes
     } = req.body;
-    
-    console.log(`[${requestId}] Transaction type: ${type}, item_id: ${item_id}, quantity: ${quantity}`);
 
     // Validation
     if (!item_id) {
@@ -203,13 +193,8 @@ const createTransaction = async (req, res) => {
     }
 
     // Verify item exists
-    console.log(`[${requestId}] Fetching item ${item_id}...`);
-    const itemStartTime = Date.now();
-    const item = await Item.findByPk(item_id, { transaction: t });
-    console.log(`[${requestId}] Item fetched in ${Date.now() - itemStartTime}ms`);
-    
+    const item = await Item.findByPk(item_id);
     if (!item) {
-      console.log(`[${requestId}] Item ${item_id} not found - rolling back`);
       await t.rollback();
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -227,13 +212,8 @@ const createTransaction = async (req, res) => {
           return res.status(400).json({ error: 'Destination location is required for IN transactions' });
         }
 
-        console.log(`[${requestId}] Fetching destination location ${to_location}...`);
-        const locationStartTime = Date.now();
-        const toLocationIn = await Location.findByPk(to_location, { transaction: t });
-        console.log(`[${requestId}] Location fetched in ${Date.now() - locationStartTime}ms`);
-        
+        const toLocationIn = await Location.findByPk(to_location);
         if (!toLocationIn) {
-          console.log(`[${requestId}] Destination location not found - rolling back`);
           await t.rollback();
           return res.status(404).json({ error: 'Destination location not found' });
         }
@@ -254,16 +234,11 @@ const createTransaction = async (req, res) => {
         }
 
         // Check stock availability
-        console.log(`[${requestId}] Checking stock for lot ${lot_id} at location ${from_location}...`);
-        const stockCheckStartTime = Date.now();
         const lotLocationOut = await LotLocation.findOne({
-          where: { lot_id: lot_id, location_id: from_location },
-          transaction: t
+          where: { lot_id: lot_id, location_id: from_location }
         });
-        console.log(`[${requestId}] Stock check completed in ${Date.now() - stockCheckStartTime}ms`);
 
         if (!lotLocationOut) {
-          console.log(`[${requestId}] LOT not found at source location - rolling back`);
           await t.rollback();
           return res.status(400).json({ error: 'LOT not found at source location' });
         }
@@ -389,14 +364,9 @@ const createTransaction = async (req, res) => {
       });
     }
 
-    console.log(`[${requestId}] Committing transaction...`);
-    const commitStartTime = Date.now();
     await t.commit();
-    console.log(`[${requestId}] Transaction committed in ${Date.now() - commitStartTime}ms`);
 
     // Fetch created transaction with associations
-    console.log(`[${requestId}] Fetching created transaction with associations...`);
-    const fetchStartTime = Date.now();
     const createdTransaction = await Transaction.findByPk(transaction.id, {
       include: [
         {
@@ -417,25 +387,11 @@ const createTransaction = async (req, res) => {
         }
       ]
     });
-    console.log(`[${requestId}] Associations fetched in ${Date.now() - fetchStartTime}ms`);
-    console.log(`[${requestId}] Transaction completed successfully in ${Date.now() - startTime}ms`);
 
     res.status(201).json(createdTransaction);
   } catch (error) {
-    console.error(`[${requestId}] Error creating transaction:`, error);
-    console.error(`[${requestId}] Error stack:`, error.stack);
-    
-    if (t) {
-      console.log(`[${requestId}] Rolling back transaction...`);
-      try {
-        await t.rollback();
-        console.log(`[${requestId}] Transaction rolled back successfully`);
-      } catch (rollbackError) {
-        console.error(`[${requestId}] Error during rollback:`, rollbackError);
-      }
-    }
-    
-    console.log(`[${requestId}] Request failed after ${Date.now() - startTime}ms`);
+    await t.rollback();
+    console.error('Error creating transaction:', error);
     res.status(500).json({ error: 'Failed to create transaction', details: error.message });
   }
 };
