@@ -13,6 +13,30 @@ const initializeDatabase = async () => {
     await sequelize.authenticate();
     console.log('Connected to 2MNumerik database');
 
+    // Log connection pool status
+    const pool = sequelize.connectionManager.pool;
+    if (pool) {
+      console.log('Connection Pool Configuration:', {
+        max: pool.max,
+        min: pool.min,
+        acquire: pool.acquireTimeoutMillis || 'default',
+        idle: pool.idleTimeoutMillis || 'default'
+      });
+
+      // Monitor pool events
+      pool.on('acquire', (connection) => {
+        console.log(`[POOL] Connection acquired. Active: ${pool.size}/${pool.max}, Pending: ${pool.pending}`);
+      });
+
+      pool.on('release', (connection) => {
+        console.log(`[POOL] Connection released. Active: ${pool.size}/${pool.max}`);
+      });
+
+      pool.on('createError', (error) => {
+        console.error('[POOL] Error creating connection:', error.message);
+      });
+    }
+
     // Note: Don't use sync() in production, use migrations instead
     // await sequelize.sync({ alter: false });
     console.log('Database ready - use migrations for schema changes');
