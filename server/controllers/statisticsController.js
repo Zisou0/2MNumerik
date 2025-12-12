@@ -529,11 +529,25 @@ class StatisticsController {
             }
           });
 
-          // Count service crea orders
-          const serviceCreaCount = await OrderProduct.count({
+          // Count travail graphique orders (service crea with etape = travail graphique)
+          const travailGraphiqueCount = await OrderProduct.count({
             where: {
               infograph_en_charge: user.username,
               atelier_concerne: 'service crea',
+              etape: 'travail graphique',
+              statut: { [Op.notIn]: ['annule'] },
+              createdAt: {
+                [Op.between]: [startOfMonth, endOfMonth]
+              }
+            }
+          });
+
+          // Count conception orders (service crea with etape = conception)
+          const conceptionCount = await OrderProduct.count({
+            where: {
+              infograph_en_charge: user.username,
+              atelier_concerne: 'service crea',
+              etape: 'conception',
               statut: { [Op.notIn]: ['annule'] },
               createdAt: {
                 [Op.between]: [startOfMonth, endOfMonth]
@@ -544,7 +558,8 @@ class StatisticsController {
           return {
             username: user.username,
             atelierOrderCount: atelierOrderCount, // petit format + grand format + sous traitance
-            serviceCreaCount: serviceCreaCount
+            travailGraphiqueCount: travailGraphiqueCount,
+            conceptionCount: conceptionCount
           };
         })
       );
@@ -1035,8 +1050,8 @@ class StatisticsController {
       }
     });
 
-    // Service crea products
-    const serviceCreaProducts = await OrderProduct.count({
+    // Travail graphique products (service crea with etape = travail graphique)
+    const travailGraphiqueProducts = await OrderProduct.count({
       include: [{
         model: Order,
         as: 'order',
@@ -1045,7 +1060,23 @@ class StatisticsController {
       }],
       where: {
         ...orderProductFilter,
-        atelier_concerne: 'service crea'
+        atelier_concerne: 'service crea',
+        etape: 'travail graphique'
+      }
+    });
+
+    // Conception products (service crea with etape = conception)
+    const conceptionProducts = await OrderProduct.count({
+      include: [{
+        model: Order,
+        as: 'order',
+        where: dateFilter,
+        attributes: []
+      }],
+      where: {
+        ...orderProductFilter,
+        atelier_concerne: 'service crea',
+        etape: 'conception'
       }
     });
 
@@ -1129,7 +1160,8 @@ class StatisticsController {
       infograph: {
         totalProducts,
         completedProducts,
-        serviceCreaProducts,
+        travailGraphiqueProducts,
+        conceptionProducts,
         atelierProducts
       },
       monthlyTrends: formattedTrends,

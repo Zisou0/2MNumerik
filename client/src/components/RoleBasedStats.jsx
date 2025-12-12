@@ -142,10 +142,10 @@ const RoleBasedStats = () => {
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {stats.infograph.all
-            .sort((a, b) => (b.atelierOrderCount + b.serviceCreaCount) - (a.atelierOrderCount + a.serviceCreaCount))
+            .sort((a, b) => (b.atelierOrderCount + b.travailGraphiqueCount + b.conceptionCount) - (a.atelierOrderCount + a.travailGraphiqueCount + a.conceptionCount))
             .map((infograph, index) => (
             <div 
-              key={`infograph-${infograph.username}-${infograph.atelierOrderCount}-${infograph.serviceCreaCount}`}
+              key={`infograph-${infograph.username}-${infograph.atelierOrderCount}-${infograph.travailGraphiqueCount}-${infograph.conceptionCount}`}
               className={`rounded-lg p-3 hover:shadow-md transition-all duration-200 ${
                 index === 0 ? 'bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-200' :
                 index === 1 ? 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200' :
@@ -169,7 +169,7 @@ const RoleBasedStats = () => {
               </div>
               
               <div className="bg-white rounded-md p-2">
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-2 gap-2 text-center">
                   <div>
                     <div className="text-sm font-bold text-blue-600">
                       {infograph.atelierOrderCount}
@@ -181,16 +181,25 @@ const RoleBasedStats = () => {
                   
                   <div>
                     <div className="text-sm font-bold text-green-600">
-                      {infograph.serviceCreaCount}
+                      {infograph.travailGraphiqueCount}
                     </div>
                     <div className="text-xs text-gray-500">
-                      Créa
+                      Trav. Graph.
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-sm font-bold text-orange-600">
+                      {infograph.conceptionCount}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Conception
                     </div>
                   </div>
                   
                   <div className="border-l border-purple-200 pl-2">
                     <div className="text-sm font-bold text-purple-600">
-                      {infograph.atelierOrderCount + infograph.serviceCreaCount}
+                      {infograph.atelierOrderCount + infograph.travailGraphiqueCount + infograph.conceptionCount}
                     </div>
                     <div className="text-xs text-gray-500">
                       Total

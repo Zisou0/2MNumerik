@@ -605,7 +605,7 @@ class ExportController {
           {
             model: OrderProduct,
             as: 'orderProduct',
-            attributes: ['id', 'quantity', 'numero_pms', 'agent_impression'],
+            attributes: ['id', 'quantity', 'numero_pms', 'agent_impression', 'bat'],
             include: [
               {
                 model: Product,
@@ -684,6 +684,7 @@ class ExportController {
           'Article': opf.orderProduct?.product?.name || '',
           'La Finition': opf.finition?.name || '',
           'Agent Impression': opf.orderProduct?.agent_impression || '',
+          'BAT': opf.orderProduct?.bat || '',
           'Date Début': opf.start_date ? 
             new Date(opf.start_date).toLocaleString('fr-FR', {
               day: '2-digit',
