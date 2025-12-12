@@ -193,7 +193,7 @@ const createTransaction = async (req, res) => {
     }
 
     // Verify item exists
-    const item = await Item.findByPk(item_id);
+    const item = await Item.findByPk(item_id, { transaction: t });
     if (!item) {
       await t.rollback();
       return res.status(404).json({ error: 'Item not found' });
@@ -212,7 +212,7 @@ const createTransaction = async (req, res) => {
           return res.status(400).json({ error: 'Destination location is required for IN transactions' });
         }
 
-        const toLocationIn = await Location.findByPk(to_location);
+        const toLocationIn = await Location.findByPk(to_location, { transaction: t });
         if (!toLocationIn) {
           await t.rollback();
           return res.status(404).json({ error: 'Destination location not found' });
@@ -235,7 +235,8 @@ const createTransaction = async (req, res) => {
 
         // Check stock availability
         const lotLocationOut = await LotLocation.findOne({
-          where: { lot_id: lot_id, location_id: from_location }
+          where: { lot_id: lot_id, location_id: from_location },
+          transaction: t
         });
 
         if (!lotLocationOut) {
@@ -271,8 +272,8 @@ const createTransaction = async (req, res) => {
         }
 
         const [fromLocationTransfer, toLocationTransfer] = await Promise.all([
-          Location.findByPk(from_location),
-          Location.findByPk(to_location)
+          Location.findByPk(from_location, { transaction: t }),
+          Location.findByPk(to_location, { transaction: t })
         ]);
 
         if (!fromLocationTransfer || !toLocationTransfer) {
@@ -282,7 +283,8 @@ const createTransaction = async (req, res) => {
 
         // Check stock availability
         const sourceLotLocation = await LotLocation.findOne({
-          where: { lot_id: lot_id, location_id: from_location }
+          where: { lot_id: lot_id, location_id: from_location },
+          transaction: t
         });
 
         if (!sourceLotLocation) {
