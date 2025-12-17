@@ -224,7 +224,7 @@ const RoleBasedStats = () => {
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {stats.atelier.all
-            .sort((a, b) => (b.productOrderCount + b.taskCount) - (a.productOrderCount + a.taskCount))
+            .sort((a, b) => b.productOrderCount - a.productOrderCount)
             .slice(0, 3)
             .map((atelierUser, index) => (
             <div 
@@ -252,7 +252,7 @@ const RoleBasedStats = () => {
               </div>
               
               <div className="bg-white rounded-md p-2">
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-2 gap-2 text-center">
                   <div>
                     <div className="text-sm font-bold text-blue-600">
                       {atelierUser.productOrderCount}
@@ -268,15 +268,6 @@ const RoleBasedStats = () => {
                     </div>
                     <div className="text-xs text-gray-500">
                       Tâches
-                    </div>
-                  </div>
-                  
-                  <div className="border-l border-blue-200 pl-2">
-                    <div className="text-sm font-bold text-blue-600">
-                      {atelierUser.productOrderCount + atelierUser.taskCount}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      Total
                     </div>
                   </div>
                 </div>
@@ -299,7 +290,7 @@ const RoleBasedStats = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {stats.atelierFinitions.all && stats.atelierFinitions.all.length > 0 ? (
             stats.atelierFinitions.all
-              .sort((a, b) => ((b.finitionCount || 0) + (b.taskCount || 0)) - ((a.finitionCount || 0) + (a.taskCount || 0)))
+              .sort((a, b) => (b.finitionCount || 0) - (a.finitionCount || 0))
               .slice(0, 3)
               .map((atelierUser, index) => (
               <div 
@@ -327,7 +318,7 @@ const RoleBasedStats = () => {
                 </div>
                 
                 <div className="bg-white rounded-md p-2">
-                  <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="grid grid-cols-2 gap-2 text-center">
                     <div>
                       <div className="text-sm font-bold text-purple-600">
                         {atelierUser.finitionCount || 0}
@@ -343,15 +334,6 @@ const RoleBasedStats = () => {
                       </div>
                       <div className="text-xs text-gray-500">
                         Tâches
-                      </div>
-                    </div>
-                    
-                    <div className="border-l border-purple-200 pl-2">
-                      <div className="text-sm font-bold text-purple-600">
-                        {(atelierUser.finitionCount || 0) + (atelierUser.taskCount || 0)}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Total
                       </div>
                     </div>
                   </div>

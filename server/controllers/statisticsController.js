@@ -1020,30 +1020,19 @@ class StatisticsController {
 
   // Infograph statistics helper
   static async getInfographStats(username, dateFilter, monthsToShow) {
-    // Apply date filter to OrderProduct through join with Order
+    // Apply date filter directly to OrderProduct.createdAt for consistency with RoleBasedStats
     let orderProductFilter = {
-      infograph_en_charge: username
+      infograph_en_charge: username,
+      ...dateFilter
     };
 
     // Total products assigned to this infograph
     const totalProducts = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: orderProductFilter
     });
 
     // Completed products
     const completedProducts = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         statut: { [Op.in]: ['termine', 'livre'] }
@@ -1052,12 +1041,6 @@ class StatisticsController {
 
     // Travail graphique products (service crea with etape = travail graphique)
     const travailGraphiqueProducts = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         atelier_concerne: 'service crea',
@@ -1067,12 +1050,6 @@ class StatisticsController {
 
     // Conception products (service crea with etape = conception)
     const conceptionProducts = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         atelier_concerne: 'service crea',
@@ -1082,12 +1059,6 @@ class StatisticsController {
 
     // Atelier products (petit format, grand format, sous-traitance)
     const atelierProducts = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         atelier_concerne: { [Op.in]: ['petit format', 'grand format', 'sous-traitance', 'soustraitance'] }
@@ -1100,26 +1071,21 @@ class StatisticsController {
 
     const monthlyTrends = await OrderProduct.findAll({
       attributes: [
-        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'year'],
-        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'month'],
-        [Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'count']
+        [Sequelize.fn('YEAR', Sequelize.col('createdAt')), 'year'],
+        [Sequelize.fn('MONTH', Sequelize.col('createdAt')), 'month'],
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
       ],
-      include: [{
-        model: Order,
-        as: 'order',
-        where: {
-          createdAt: { [Op.gte]: monthsAgo }
-        },
-        attributes: []
-      }],
-      where: orderProductFilter,
+      where: {
+        infograph_en_charge: username,
+        createdAt: { [Op.gte]: monthsAgo }
+      },
       group: [
-        Sequelize.fn('YEAR', Sequelize.col('order.createdAt')),
-        Sequelize.fn('MONTH', Sequelize.col('order.createdAt'))
+        Sequelize.fn('YEAR', Sequelize.col('createdAt')),
+        Sequelize.fn('MONTH', Sequelize.col('createdAt'))
       ],
       order: [
-        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'ASC'],
-        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'ASC']
+        [Sequelize.fn('YEAR', Sequelize.col('createdAt')), 'ASC'],
+        [Sequelize.fn('MONTH', Sequelize.col('createdAt')), 'ASC']
       ]
     });
 
@@ -1132,11 +1098,6 @@ class StatisticsController {
         model: Product,
         as: 'product',
         attributes: ['name']
-      }, {
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
       }],
       where: orderProductFilter,
       group: ['product.id'],
@@ -1171,19 +1132,14 @@ class StatisticsController {
 
   // Atelier statistics helper
   static async getAtelierStats(username, dateFilter, monthsToShow) {
-    // Apply date filter to OrderProduct through join with Order
+    // Apply date filter directly to OrderProduct.createdAt for consistency with RoleBasedStats
     let orderProductFilter = {
-      agent_impression: username
+      agent_impression: username,
+      ...dateFilter
     };
 
     // Current orders (en_cours, problem_technique, termine)
     const currentOrders = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         statut: { [Op.in]: ['en_cours', 'problem_technique', 'termine'] }
@@ -1192,12 +1148,6 @@ class StatisticsController {
 
     // Delivered orders (livre)
     const deliveredOrders = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         statut: 'livre'
@@ -1206,12 +1156,6 @@ class StatisticsController {
 
     // Cancelled orders (annule)
     const cancelledOrders = await OrderProduct.count({
-      include: [{
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
-      }],
       where: {
         ...orderProductFilter,
         statut: 'annule'
@@ -1257,26 +1201,21 @@ class StatisticsController {
 
     const monthlyTrends = await OrderProduct.findAll({
       attributes: [
-        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'year'],
-        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'month'],
-        [Sequelize.fn('COUNT', Sequelize.col('OrderProduct.id')), 'count']
+        [Sequelize.fn('YEAR', Sequelize.col('createdAt')), 'year'],
+        [Sequelize.fn('MONTH', Sequelize.col('createdAt')), 'month'],
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
       ],
-      include: [{
-        model: Order,
-        as: 'order',
-        where: {
-          createdAt: { [Op.gte]: monthsAgo }
-        },
-        attributes: []
-      }],
-      where: orderProductFilter,
+      where: {
+        agent_impression: username,
+        createdAt: { [Op.gte]: monthsAgo }
+      },
       group: [
-        Sequelize.fn('YEAR', Sequelize.col('order.createdAt')),
-        Sequelize.fn('MONTH', Sequelize.col('order.createdAt'))
+        Sequelize.fn('YEAR', Sequelize.col('createdAt')),
+        Sequelize.fn('MONTH', Sequelize.col('createdAt'))
       ],
       order: [
-        [Sequelize.fn('YEAR', Sequelize.col('order.createdAt')), 'ASC'],
-        [Sequelize.fn('MONTH', Sequelize.col('order.createdAt')), 'ASC']
+        [Sequelize.fn('YEAR', Sequelize.col('createdAt')), 'ASC'],
+        [Sequelize.fn('MONTH', Sequelize.col('createdAt')), 'ASC']
       ]
     });
 
@@ -1289,11 +1228,6 @@ class StatisticsController {
         model: Product,
         as: 'product',
         attributes: ['name']
-      }, {
-        model: Order,
-        as: 'order',
-        where: dateFilter,
-        attributes: []
       }],
       where: orderProductFilter,
       group: ['product.id'],

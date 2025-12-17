@@ -1098,16 +1098,16 @@ function StatisticsPage() {
                 
                 <div className="bg-green-50 rounded-xl p-4 text-center border border-green-200">
                   <div className="text-2xl font-bold text-green-600 mb-1">
-                    {employeeStatistics.infograph.completedProducts}
+                    {employeeStatistics.infograph.travailGraphiqueProducts || 0}
                   </div>
-                  <div className="text-sm font-medium text-green-800">Produits Terminés</div>
+                  <div className="text-sm font-medium text-green-800">Travail Graphique</div>
                 </div>
                 
                 <div className="bg-purple-50 rounded-xl p-4 text-center border border-purple-200">
                   <div className="text-2xl font-bold text-purple-600 mb-1">
-                    {employeeStatistics.infograph.serviceCreaProducts}
+                    {employeeStatistics.infograph.conceptionProducts || 0}
                   </div>
-                  <div className="text-sm font-medium text-purple-800">Service Créa</div>
+                  <div className="text-sm font-medium text-purple-800">Conception</div>
                 </div>
                 
                 <div className="bg-orange-50 rounded-xl p-4 text-center border border-orange-200">
