@@ -2180,6 +2180,23 @@ const DashboardPageClean = () => {
             value={tempValue || ''}
             onChange={(e) => {
               const newValue = e.target.value
+              
+              // Validation: graphiste must be assigned before changing to 'impression' etape
+              if ((newValue === 'impression' || newValue === 'en production') && !orderProductRow.infograph_en_charge) {
+                setFinitionErrorMessage('Vous devez sélectionner un graphiste avant de passer à l\'étape "impression".')
+                setShowFinitionErrorDialog(true)
+                cancelInlineEdit(orderProductRow.orderProductId, 'etape')
+                return
+              }
+              
+              // Validation: agent impression must be assigned before changing to 'finition' etape
+              if (newValue === 'finition' && !orderProductRow.agent_impression) {
+                setFinitionErrorMessage('Vous devez sélectionner un agent impression avant de passer à l\'étape "finition".')
+                setShowFinitionErrorDialog(true)
+                cancelInlineEdit(orderProductRow.orderProductId, 'etape')
+                return
+              }
+              
               handleTempValueChange(orderProductRow.orderProductId, 'etape', newValue)
               saveInlineEdit(orderProductRow.orderProductId, 'etape', newValue)
             }}
