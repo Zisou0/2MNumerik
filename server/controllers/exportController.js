@@ -1,7 +1,12 @@
 const XLSX = require('xlsx');
 const mysqldump = require('mysqldump');
+const zlib = require('zlib');
+const { promisify } = require('util');
 const { Order, Product, OrderProduct, Client, User, Finition, ProductFinition, OrderProductFinition, AtelierTask } = require('../models');
 const { Op } = require('sequelize');
+
+// Promisify gzip for async/await usage
+const gzip = promisify(zlib.gzip);
 
 class ExportController {
   // Export dashboard table data to Excel
@@ -849,15 +854,19 @@ class ExportController {
 
       const result = await mysqldump(dumpOptions);
       
-      // Set headers for SQL file download
-      const filename = `database_export_${new Date().toISOString().split('T')[0]}.sql`;
+      // Compress the SQL dump with gzip (reduces size by ~85-90%)
+      const sqlData = result.dump.data;
+      const compressedData = await gzip(Buffer.from(sqlData, 'utf8'));
       
-      res.setHeader('Content-Type', 'application/sql');
+      // Set headers for compressed SQL file download
+      const filename = `database_export_${new Date().toISOString().split('T')[0]}.sql.gz`;
+      
+      res.setHeader('Content-Type', 'application/gzip');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Length', Buffer.byteLength(result.dump.data, 'utf8'));
+      res.setHeader('Content-Length', compressedData.length);
 
-      // Send the SQL dump
-      res.send(result.dump.data);
+      // Send the compressed SQL dump
+      res.send(compressedData);
 
     } catch (error) {
       console.error('SQL export error:', error);

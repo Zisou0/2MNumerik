@@ -155,7 +155,8 @@ function SettingsPage() {
       
       // Generate filename with current date and optional date range
       const currentDate = new Date().toISOString().split('T')[0]
-      const extension = format === 'sql' ? 'sql' : 'xlsx'
+      // SQL exports are now gzip compressed (.sql.gz)
+      const extension = format === 'sql' ? 'sql.gz' : 'xlsx'
       let filename = `database_export_${currentDate}`
       if (databaseDateFrom || databaseDateTo) {
         filename += `_filtered`
