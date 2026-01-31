@@ -316,20 +316,35 @@ export const exportAPI = {
     
     const url = `${API_BASE_URL}/export/database?${queryParams}`
     
-    const response = await fetch(url, {
-      credentials: 'include',
-      headers: {
-        'ngrok-skip-browser-warning': 'true',
-      },
-    })
+    // Use AbortController with 5-minute timeout for large exports
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minutes
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
-    }
+    try {
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+        signal: controller.signal,
+      })
+      
+      clearTimeout(timeoutId)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      }
 
-    // Return the blob for file download
-    return response.blob()
+      // Return the blob for file download
+      return response.blob()
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        throw new Error('L\'export a pris trop de temps. Essayez avec une plage de dates plus courte.')
+      }
+      throw error
+    }
   },
 
   exportDashboardTable: async (params = {}) => {

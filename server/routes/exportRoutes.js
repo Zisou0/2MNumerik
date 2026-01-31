@@ -7,6 +7,13 @@ const { authenticateToken, checkConnection } = require('../middleware/auth');
 router.use(checkConnection);
 router.use(authenticateToken);
 
+// Middleware to extend timeout for export routes (5 minutes)
+const extendTimeout = (req, res, next) => {
+  req.setTimeout(300000); // 5 minutes
+  res.setTimeout(300000); // 5 minutes
+  next();
+};
+
 // Export dashboard table route
 router.get('/dashboard', ExportController.exportDashboardTable);
 
@@ -17,6 +24,7 @@ router.get('/tasks', ExportController.exportTasksTable);
 router.get('/finitions', ExportController.exportFinitionsTable);
 
 // Export database route (admin only - handled in controller)
-router.get('/database', ExportController.exportDatabase);
+// Uses extended timeout for large exports
+router.get('/database', extendTimeout, ExportController.exportDatabase);
 
 module.exports = router;
