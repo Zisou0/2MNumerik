@@ -53,6 +53,12 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Commentaires généraux pour toute la commande'
+    },
+    express_pending: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Indicates if an express request is pending admin approval'
     }
   }, {
     tableName: 'orders',

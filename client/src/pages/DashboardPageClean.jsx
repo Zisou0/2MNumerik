@@ -694,13 +694,13 @@ const DashboardPageClean = () => {
           if (!visibleColumns[columnKey]) return null
           
           return (
-            <td key={columnKey} className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
+            <td key={columnKey} className={columnKey === 'client_info' ? 'px-2 py-0.5 text-sm text-gray-900' : 'px-2 py-0.5 whitespace-nowrap text-sm text-gray-900'}>
               {(() => {
                 switch (columnKey) {
                   case 'atelier_concerne':
                     return renderInlineAtelier(row)
                   case 'client_info':
-                    return row.client_info
+                    return renderClientInfoWithBadge(row)
                   case 'product_name':
                     return row.product_name
                   case 'quantity':
@@ -757,13 +757,13 @@ const DashboardPageClean = () => {
           if (!visibleColumns[columnKey]) return null
           
           return (
-            <td key={columnKey} className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
+            <td key={columnKey} className={columnKey === 'client_info' ? 'px-2 py-0.5 text-sm text-gray-900' : 'px-2 py-0.5 whitespace-nowrap text-sm text-gray-900'}>
               {(() => {
                 switch (columnKey) {
                   case 'atelier_concerne':
                     return renderInlineAtelier(row)
                   case 'client_info':
-                    return row.client_info
+                    return renderClientInfoWithBadge(row)
                   case 'product_name':
                     return row.product_name
                   case 'quantity':
@@ -913,6 +913,7 @@ const DashboardPageClean = () => {
               client_info: order.clientInfo?.nom || order.client,
               commercial_en_charge: order.commercial_en_charge,
               date_limite_livraison_attendue: order.date_limite_livraison_attendue,
+              order_express_pending: order.express_pending, // Order-level express pending flag
               
               // Product-level fields
               product_id: orderProduct.product_id,
@@ -928,7 +929,7 @@ const DashboardPageClean = () => {
               date_limite_livraison_estimee: orderProduct.date_limite_livraison_estimee,
               estimated_work_time_minutes: orderProduct.estimated_work_time_minutes,
               bat: orderProduct.bat,
-              express: orderProduct.express,
+              express: orderProduct.express, // Product-level express status
               pack_fin_annee: orderProduct.pack_fin_annee,
               type_sous_traitance: orderProduct.type_sous_traitance,
               commentaires: orderProduct.commentaires,
@@ -1344,6 +1345,49 @@ const DashboardPageClean = () => {
       setError('Erreur lors de la mise à jour')
       cancelInlineEdit(orderProductId, 'statut')
     }
+  }
+
+  // Render client info with express pending badge
+  const renderClientInfoWithBadge = (row) => {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium">{row.client_info}</span>
+          {row.order_express_pending && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-orange-50 text-orange-700 border-2 border-orange-400 rounded-lg shadow-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Express en attente
+            </span>
+          )}
+        </div>
+        {user?.role === 'admin' && row.order_express_pending && (
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              onClick={(e) => handleApproveExpress(row, e)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white border border-green-700 rounded-lg hover:bg-green-700 hover:shadow-md active:bg-green-800 transition-all duration-150"
+              title="Approuver express"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Approuver
+            </button>
+            <button
+              onClick={(e) => handleRejectExpress(row, e)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 text-white border border-red-700 rounded-lg hover:bg-red-700 hover:shadow-md active:bg-red-800 transition-all duration-150"
+              title="Rejeter express"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Rejeter
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // Render inline editing components
@@ -2351,6 +2395,50 @@ const DashboardPageClean = () => {
     setItemToDelete(null)
   }
 
+  // Handler for approving express request
+  const handleApproveExpress = async (orderProductRow, e) => {
+    e.stopPropagation() // Prevent row click
+    
+    try {
+      await orderAPI.approveExpressRequest(orderProductRow.orderId)
+      
+      // Update local state - set all products of this order to express='oui' and clear pending flag
+      setOrderProductRows(prev => prev.map(row => 
+        row.orderId === orderProductRow.orderId
+          ? { ...row, express: 'oui', order_express_pending: false }
+          : row
+      ))
+      
+      // Refresh stats
+      fetchStats()
+    } catch (err) {
+      console.error('Error approving express request:', err)
+      setError('Erreur lors de l\'approbation de la demande express')
+    }
+  }
+
+  // Handler for rejecting express request
+  const handleRejectExpress = async (orderProductRow, e) => {
+    e.stopPropagation() // Prevent row click
+    
+    try {
+      await orderAPI.rejectExpressRequest(orderProductRow.orderId)
+      
+      // Update local state - clear pending flag, products remain express='non'
+      setOrderProductRows(prev => prev.map(row => 
+        row.orderId === orderProductRow.orderId
+          ? { ...row, order_express_pending: false }
+          : row
+      ))
+      
+      // Refresh stats
+      fetchStats()
+    } catch (err) {
+      console.error('Error rejecting express request:', err)
+      setError('Erreur lors du rejet de la demande express')
+    }
+  }
+
   // Effects - Load data when filters change
   useEffect(() => {
     fetchOrders()
@@ -2998,8 +3086,8 @@ const DashboardPageClean = () => {
                             </td>
                           )}
                           {visibleColumns.client_info && (
-                            <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
-                              {row.client_info}
+                            <td className="px-2 py-0.5 text-sm text-gray-900">
+                              {renderClientInfoWithBadge(row)}
                             </td>
                           )}
                           {visibleColumns.product_name && (
@@ -3156,8 +3244,8 @@ const DashboardPageClean = () => {
                             </td>
                           )}
                           {visibleColumns.client_info && (
-                            <td className="px-2 py-0.5 whitespace-nowrap text-sm text-gray-900">
-                              {row.client_info}
+                            <td className="px-2 py-0.5 text-sm text-gray-900">
+                              {renderClientInfoWithBadge(row)}
                             </td>
                           )}
                           {visibleColumns.product_name && (

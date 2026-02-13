@@ -529,6 +529,15 @@ class OrderController {
         });
       }
 
+      // Check if ANY product has express='oui' to determine if order needs admin approval
+      const hasExpressRequest = products.some(product => product.express === 'oui');
+      let orderExpressPending = false;
+      
+      if (hasExpressRequest) {
+        // User requested express on one or more products, needs admin approval
+        orderExpressPending = true;
+      }
+
       // Validate products array
       for (const product of products) {
         if (!product.productId || !product.quantity || product.quantity <= 0) {
@@ -596,7 +605,8 @@ class OrderController {
         client: client || null, // Keep for backward compatibility
         client_id: client_id || null, // New client reference
         date_limite_livraison_attendue: date_limite_livraison_attendue ? new Date(date_limite_livraison_attendue) : null,
-        statut
+        statut,
+        express_pending: orderExpressPending
       }, { transaction });
 
       // Create order-product relationships with product-specific fields
@@ -617,7 +627,8 @@ class OrderController {
         atelier_concerne: product.atelier_concerne || null,
         commentaires: product.commentaires || null,
         bat: product.bat || null,
-        express: product.express || null,
+        // If user set express='oui', change it to 'non' and wait for admin approval
+        express: (product.express === 'oui' && orderExpressPending) ? 'non' : (product.express || null),
         pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
         type_sous_traitance: product.type_sous_traitance || null,
         supplier_id: product.supplier_id || null
@@ -1149,6 +1160,120 @@ class OrderController {
       });
     } catch (error) {
       console.error('Delete order error:', error);
+      res.status(500).json({ message: 'Erreur serveur' });
+    }
+  }
+
+  // Approve express request for an order
+  static async approveExpressRequest(req, res) {
+    const transaction = await Order.sequelize.transaction();
+    
+    try {
+      const { id } = req.params;
+
+      // Find the order
+      const order = await Order.findByPk(id, { transaction });
+
+      if (!order) {
+        await transaction.rollback();
+        return res.status(404).json({ message: 'Commande non trouvée' });
+      }
+
+      // Check if there's a pending express request
+      if (!order.express_pending) {
+        await transaction.rollback();
+        return res.status(400).json({ 
+          message: 'Aucune demande express en attente pour cette commande' 
+        });
+      }
+
+      // Approve the express request - update order and all its products
+      order.express_pending = false;
+      await order.save({ transaction });
+      
+      // Update all products of this order to express='oui'
+      await OrderProduct.update(
+        { express: 'oui' },
+        { 
+          where: { order_id: id },
+          transaction 
+        }
+      );
+      
+      await transaction.commit();
+
+      // Emit real-time event
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('orderExpressApproved', {
+          orderId: order.id,
+          express_pending: order.express_pending
+        });
+      }
+
+      res.json({
+        message: 'Demande express approuvée avec succès',
+        order: {
+          id: order.id,
+          express_pending: order.express_pending
+        }
+      });
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Approve express request error:', error);
+      res.status(500).json({ message: 'Erreur serveur' });
+    }
+  }
+
+  // Reject express request for an order
+  static async rejectExpressRequest(req, res) {
+    const transaction = await Order.sequelize.transaction();
+    
+    try {
+      const { id } = req.params;
+
+      // Find the order
+      const order = await Order.findByPk(id, { transaction });
+
+      if (!order) {
+        await transaction.rollback();
+        return res.status(404).json({ message: 'Commande non trouvée' });
+      }
+
+      // Check if there's a pending express request
+      if (!order.express_pending) {
+        await transaction.rollback();
+        return res.status(400).json({ 
+          message: 'Aucune demande express en attente pour cette commande' 
+        });
+      }
+
+      // Reject the express request - just clear the pending flag
+      // Products remain as express='non'
+      order.express_pending = false;
+      await order.save({ transaction });
+      
+      await transaction.commit();
+
+      // Emit real-time event
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('orderExpressRejected', {
+          orderId: order.id,
+          express_pending: order.express_pending
+        });
+      }
+
+      res.json({
+        message: 'Demande express rejetée',
+        order: {
+          id: order.id,
+          express_pending: order.express_pending
+        }
+      });
+    } catch (error) {
+      await transaction.rollback();
+      console.error('Reject express request error:', error);
       res.status(500).json({ message: 'Erreur serveur' });
     }
   }

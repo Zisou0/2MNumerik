@@ -129,6 +129,14 @@ export const orderAPI = {
     method: 'DELETE',
   }),
   
+  approveExpressRequest: (id) => apiCall(`/orders/${id}/approve-express`, {
+    method: 'POST',
+  }),
+  
+  rejectExpressRequest: (id) => apiCall(`/orders/${id}/reject-express`, {
+    method: 'POST',
+  }),
+  
   getOrderStats: () => apiCall('/orders/stats'),
   
   // History orders (delivered and cancelled)
