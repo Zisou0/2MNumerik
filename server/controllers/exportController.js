@@ -830,7 +830,7 @@ class ExportController {
         port: config.port || 3306
       };
 
-      // Create SQL dump
+      // Create SQL dump - exports ALL tables in the database
       const dumpOptions = {
         connection: dbConfig,
         dumpToFile: false, // We want the SQL as a string
@@ -838,24 +838,26 @@ class ExportController {
         includeViewStructure: true,
         includeStructure: true,
         includeData: true,
-        tables: [
-          'Users',
-          'Clients', 
-          'Products',
-          'Orders',
-          'OrderProducts',
-          'Finitions',
-          'ProductFinitions',
-          'OrderProductFinitions',
-          'AtelierTasks',
-          'SequelizeMeta'
-        ]
+        addDropTable: true // Add DROP TABLE IF EXISTS before each CREATE TABLE
+        // No tables option = exports all tables in the database
       };
 
       const result = await mysqldump(dumpOptions);
       
+      // Combine schema (CREATE TABLE) and data (INSERT INTO) statements with proper foreign key handling
+      // result.dump.schema contains CREATE TABLE statements
+      // result.dump.data contains INSERT INTO statements
+      const sqlData = `/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+
+${result.dump.schema}
+
+${result.dump.data}
+
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;`;
+      
       // Compress the SQL dump with gzip (reduces size by ~85-90%)
-      const sqlData = result.dump.data;
       const compressedData = await gzip(Buffer.from(sqlData, 'utf8'));
       
       // Set headers for compressed SQL file download
