@@ -694,7 +694,7 @@ const DashboardPageClean = () => {
           if (!visibleColumns[columnKey]) return null
           
           return (
-            <td key={columnKey} className={columnKey === 'client_info' ? 'px-2 py-0.5 text-sm text-gray-900' : 'px-2 py-0.5 whitespace-nowrap text-sm text-gray-900'}>
+            <td key={columnKey} className={columnKey === 'client_info' ? 'px-2 py-0.5 text-sm text-gray-900 max-w-xs overflow-hidden' : 'px-2 py-0.5 whitespace-nowrap text-sm text-gray-900'}>
               {(() => {
                 switch (columnKey) {
                   case 'atelier_concerne':
@@ -757,7 +757,7 @@ const DashboardPageClean = () => {
           if (!visibleColumns[columnKey]) return null
           
           return (
-            <td key={columnKey} className={columnKey === 'client_info' ? 'px-2 py-0.5 text-sm text-gray-900' : 'px-2 py-0.5 whitespace-nowrap text-sm text-gray-900'}>
+            <td key={columnKey} className={columnKey === 'client_info' ? 'px-2 py-0.5 text-sm text-gray-900 max-w-xs overflow-hidden' : 'px-2 py-0.5 whitespace-nowrap text-sm text-gray-900'}>
               {(() => {
                 switch (columnKey) {
                   case 'atelier_concerne':
@@ -1350,39 +1350,35 @@ const DashboardPageClean = () => {
   // Render client info with express pending badge
   const renderClientInfoWithBadge = (row) => {
     return (
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">{row.client_info}</span>
-          {row.order_express_pending && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-orange-50 text-orange-700 border-2 border-orange-400 rounded-lg shadow-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Express en attente
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="font-medium truncate" title={row.client_info}>{row.client_info}</span>
+        {row.order_express_pending && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-400 rounded whitespace-nowrap" title="Express en attente">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Express
+          </span>
+        )}
         {user?.role === 'admin' && row.order_express_pending && (
-          <div className="flex items-center gap-2 mt-1">
+          <div className="inline-flex items-center gap-1">
             <button
               onClick={(e) => handleApproveExpress(row, e)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white border border-green-700 rounded-lg hover:bg-green-700 hover:shadow-md active:bg-green-800 transition-all duration-150"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-green-600 text-white border border-green-700 rounded hover:bg-green-700 transition-colors"
               title="Approuver express"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Approuver
             </button>
             <button
               onClick={(e) => handleRejectExpress(row, e)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 text-white border border-red-700 rounded-lg hover:bg-red-700 hover:shadow-md active:bg-red-800 transition-all duration-150"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-red-600 text-white border border-red-700 rounded hover:bg-red-700 transition-colors"
               title="Rejeter express"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
-              Rejeter
             </button>
           </div>
         )}
