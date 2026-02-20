@@ -913,7 +913,6 @@ const DashboardPageClean = () => {
               client_info: order.clientInfo?.nom || order.client,
               commercial_en_charge: order.commercial_en_charge,
               date_limite_livraison_attendue: order.date_limite_livraison_attendue,
-              order_express_pending: order.express_pending, // Order-level express pending flag
               
               // Product-level fields
               product_id: orderProduct.product_id,
@@ -1352,7 +1351,7 @@ const DashboardPageClean = () => {
     return (
       <div className="flex items-center gap-2">
         <span className="font-medium truncate" title={row.client_info}>{row.client_info}</span>
-        {row.order_express_pending && (
+        {row.express === 'pending' && (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-400 rounded whitespace-nowrap" title="Express en attente">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1360,7 +1359,7 @@ const DashboardPageClean = () => {
             Express
           </span>
         )}
-        {user?.role === 'admin' && row.order_express_pending && (
+        {user?.role === 'admin' && row.express === 'pending' && (
           <div className="inline-flex items-center gap-1">
             <button
               onClick={(e) => handleApproveExpress(row, e)}
@@ -2396,12 +2395,12 @@ const DashboardPageClean = () => {
     e.stopPropagation() // Prevent row click
     
     try {
-      await orderAPI.approveExpressRequest(orderProductRow.orderId)
+      await orderAPI.approveExpressRequest(orderProductRow.orderId, orderProductRow.orderProductId)
       
-      // Update local state - set all products of this order to express='oui' and clear pending flag
+      // Update local state - set only this specific product to express='oui'
       setOrderProductRows(prev => prev.map(row => 
-        row.orderId === orderProductRow.orderId
-          ? { ...row, express: 'oui', order_express_pending: false }
+        row.orderProductId === orderProductRow.orderProductId
+          ? { ...row, express: 'oui' }
           : row
       ))
       
@@ -2418,12 +2417,12 @@ const DashboardPageClean = () => {
     e.stopPropagation() // Prevent row click
     
     try {
-      await orderAPI.rejectExpressRequest(orderProductRow.orderId)
+      await orderAPI.rejectExpressRequest(orderProductRow.orderId, orderProductRow.orderProductId)
       
-      // Update local state - clear pending flag, products remain express='non'
+      // Update local state - set only this specific product to express='non'
       setOrderProductRows(prev => prev.map(row => 
-        row.orderId === orderProductRow.orderId
-          ? { ...row, order_express_pending: false }
+        row.orderProductId === orderProductRow.orderProductId
+          ? { ...row, express: 'non' }
           : row
       ))
       

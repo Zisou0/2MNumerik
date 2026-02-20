@@ -529,15 +529,6 @@ class OrderController {
         });
       }
 
-      // Check if ANY product has express='oui' to determine if order needs admin approval
-      const hasExpressRequest = products.some(product => product.express === 'oui');
-      let orderExpressPending = false;
-      
-      if (hasExpressRequest) {
-        // User requested express on one or more products, needs admin approval
-        orderExpressPending = true;
-      }
-
       // Validate products array
       for (const product of products) {
         if (!product.productId || !product.quantity || product.quantity <= 0) {
@@ -548,10 +539,10 @@ class OrderController {
         }
 
         // Validate required product fields
-        if (product.express !== undefined && product.express !== '' && !['oui', 'non'].includes(product.express)) {
+        if (product.express !== undefined && product.express !== '' && !['oui', 'non', 'pending'].includes(product.express)) {
           await transaction.rollback();
           return res.status(400).json({ 
-            message: 'Le champ Express doit être "oui" ou "non"' 
+            message: 'Le champ Express doit être "oui", "non" ou "pending"' 
           });
         }
 
@@ -605,10 +596,12 @@ class OrderController {
         client: client || null, // Keep for backward compatibility
         client_id: client_id || null, // New client reference
         date_limite_livraison_attendue: date_limite_livraison_attendue ? new Date(date_limite_livraison_attendue) : null,
-        statut,
-        express_pending: orderExpressPending
+        statut
       }, { transaction });
 
+      // Check if user is admin
+      const userRole = req.user?.role;
+      
       // Create order-product relationships with product-specific fields
       const orderProducts = products.map(product => ({
         order_id: order.id,
@@ -627,8 +620,11 @@ class OrderController {
         atelier_concerne: product.atelier_concerne || null,
         commentaires: product.commentaires || null,
         bat: product.bat || null,
-        // If user set express='oui', change it to 'non' and wait for admin approval
-        express: (product.express === 'oui' && orderExpressPending) ? 'non' : (product.express || null),
+        // If non-admin user sets express='oui', change it to 'pending' to wait for admin approval
+        // If admin sets express='oui', keep it as 'oui' (pre-approved)
+        express: product.express === 'oui' 
+          ? (userRole === 'admin' ? 'oui' : 'pending') 
+          : (product.express || 'non'),
         pack_fin_annee: product.pack_fin_annee === 'true' || product.pack_fin_annee === true,
         type_sous_traitance: product.type_sous_traitance || null,
         supplier_id: product.supplier_id || null
@@ -1164,40 +1160,39 @@ class OrderController {
     }
   }
 
-  // Approve express request for an order
+  // Approve express request for a specific product
   static async approveExpressRequest(req, res) {
     const transaction = await Order.sequelize.transaction();
     
     try {
-      const { id } = req.params;
+      const { orderId, orderProductId } = req.params;
 
-      // Find the order
-      const order = await Order.findByPk(id, { transaction });
+      // Find the order product
+      const orderProduct = await OrderProduct.findOne({
+        where: {
+          id: orderProductId,
+          order_id: orderId
+        },
+        transaction
+      });
 
-      if (!order) {
+      if (!orderProduct) {
         await transaction.rollback();
-        return res.status(404).json({ message: 'Commande non trouvée' });
+        return res.status(404).json({ message: 'Produit non trouvé dans cette commande' });
       }
 
-      // Check if there's a pending express request
-      if (!order.express_pending) {
+      // Check if this product has a pending express request
+      if (orderProduct.express !== 'pending') {
         await transaction.rollback();
         return res.status(400).json({ 
-          message: 'Aucune demande express en attente pour cette commande' 
+          message: 'Aucune demande express en attente pour ce produit' 
         });
       }
 
-      // Approve the express request - update order and all its products
-      order.express_pending = false;
-      await order.save({ transaction });
-      
-      // Update all products of this order to express='oui'
-      await OrderProduct.update(
+      // Approve the express request for this specific product
+      await orderProduct.update(
         { express: 'oui' },
-        { 
-          where: { order_id: id },
-          transaction 
-        }
+        { transaction }
       );
       
       await transaction.commit();
@@ -1205,17 +1200,18 @@ class OrderController {
       // Emit real-time event
       const io = req.app.get('io');
       if (io) {
-        io.emit('orderExpressApproved', {
-          orderId: order.id,
-          express_pending: order.express_pending
+        io.emit('orderProductExpressApproved', {
+          orderId: orderId,
+          orderProductId: orderProductId
         });
       }
 
       res.json({
         message: 'Demande express approuvée avec succès',
-        order: {
-          id: order.id,
-          express_pending: order.express_pending
+        orderProduct: {
+          id: orderProduct.id,
+          order_id: orderProduct.order_id,
+          express: 'oui'
         }
       });
     } catch (error) {
@@ -1225,50 +1221,58 @@ class OrderController {
     }
   }
 
-  // Reject express request for an order
+  // Reject express request for a specific product
   static async rejectExpressRequest(req, res) {
     const transaction = await Order.sequelize.transaction();
     
     try {
-      const { id } = req.params;
+      const { orderId, orderProductId } = req.params;
 
-      // Find the order
-      const order = await Order.findByPk(id, { transaction });
+      // Find the order product
+      const orderProduct = await OrderProduct.findOne({
+        where: {
+          id: orderProductId,
+          order_id: orderId
+        },
+        transaction
+      });
 
-      if (!order) {
+      if (!orderProduct) {
         await transaction.rollback();
-        return res.status(404).json({ message: 'Commande non trouvée' });
+        return res.status(404).json({ message: 'Produit non trouvé dans cette commande' });
       }
 
-      // Check if there's a pending express request
-      if (!order.express_pending) {
+      // Check if this product has a pending express request
+      if (orderProduct.express !== 'pending') {
         await transaction.rollback();
         return res.status(400).json({ 
-          message: 'Aucune demande express en attente pour cette commande' 
+          message: 'Aucune demande express en attente pour ce produit' 
         });
       }
 
-      // Reject the express request - just clear the pending flag
-      // Products remain as express='non'
-      order.express_pending = false;
-      await order.save({ transaction });
+      // Reject the express request for this specific product
+      await orderProduct.update(
+        { express: 'non' },
+        { transaction }
+      );
       
       await transaction.commit();
 
       // Emit real-time event
       const io = req.app.get('io');
       if (io) {
-        io.emit('orderExpressRejected', {
-          orderId: order.id,
-          express_pending: order.express_pending
+        io.emit('orderProductExpressRejected', {
+          orderId: orderId,
+          orderProductId: orderProductId
         });
       }
 
       res.json({
         message: 'Demande express rejetée',
-        order: {
-          id: order.id,
-          express_pending: order.express_pending
+        orderProduct: {
+          id: orderProduct.id,
+          order_id: orderProduct.order_id,
+          express: 'non'
         }
       });
     } catch (error) {
@@ -1899,7 +1903,18 @@ class OrderController {
       if (statut !== undefined) updateData.statut = statut;
       if (estimated_work_time_minutes !== undefined) updateData.estimated_work_time_minutes = estimated_work_time_minutes;
       if (bat !== undefined) updateData.bat = bat;
-      if (express !== undefined) updateData.express = express;
+      
+      // Handle express field with role-based logic
+      if (express !== undefined) {
+        // If non-admin user tries to set express='oui', convert to 'pending' for approval
+        // If admin sets express='oui', keep it as 'oui' (pre-approved)
+        if (express === 'oui' && userRole !== 'admin') {
+          updateData.express = 'pending';
+        } else {
+          updateData.express = express;
+        }
+      }
+      
       if (pack_fin_annee !== undefined) updateData.pack_fin_annee = pack_fin_annee === 'true' || pack_fin_annee === true;
       if (commentaires !== undefined) updateData.commentaires = commentaires;
       if (type_sous_traitance !== undefined) updateData.type_sous_traitance = type_sous_traitance;

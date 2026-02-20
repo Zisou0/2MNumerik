@@ -91,10 +91,10 @@ module.exports = (sequelize) => {
       comment: 'BAT (Bon à tirer) pour ce produit spécifique'
     },
     express: {
-      type: DataTypes.ENUM('oui', 'non'),
+      type: DataTypes.ENUM('oui', 'non', 'pending'),
       allowNull: false,
       defaultValue: 'non',
-      comment: 'Express flag pour ce produit spécifique'
+      comment: 'Express flag pour ce produit spécifique: oui (approved), non (not requested or rejected), pending (awaiting approval)'
     },
     agent_impression: {
       type: DataTypes.STRING,

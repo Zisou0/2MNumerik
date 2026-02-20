@@ -129,11 +129,11 @@ export const orderAPI = {
     method: 'DELETE',
   }),
   
-  approveExpressRequest: (id) => apiCall(`/orders/${id}/approve-express`, {
+  approveExpressRequest: (orderId, orderProductId) => apiCall(`/orders/${orderId}/products/${orderProductId}/approve-express`, {
     method: 'POST',
   }),
   
-  rejectExpressRequest: (id) => apiCall(`/orders/${id}/reject-express`, {
+  rejectExpressRequest: (orderId, orderProductId) => apiCall(`/orders/${orderId}/products/${orderProductId}/reject-express`, {
     method: 'POST',
   }),
   
